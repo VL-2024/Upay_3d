@@ -9,14 +9,10 @@ import { InputController } from "./input.js";
 import { flickToTarget } from "./flick.js";
 import { DebugLabels } from "./debug-labels.js";
 import { CollectorSystem } from "./collector.js";
+import { ScenarioEngine } from "./scenario-engine.js";
 
 const canvas = document.getElementById("renderCanvas");
-const engine = new BABYLON.Engine(canvas, true, {
-  preserveDrawingBuffer: true,
-  stencil: true,
-  adaptToDeviceRatio: true
-});
-
+const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:true, stencil:true, adaptToDeviceRatio:true });
 const havokInstance = await HavokPhysics();
 const { scene } = createScene(engine, canvas, havokInstance);
 const store = new StateStore();
@@ -24,235 +20,44 @@ const scatter = new ScatterSystem(scene);
 const selector = new PairSelector(scene, store);
 const labels = new DebugLabels(scene);
 const collector = new CollectorSystem(scene);
+const scenario = new ScenarioEngine();
 const statusEl = document.querySelector(".status");
 if (statusEl) statusEl.textContent = `v${CONFIG.version} • Babylon.js + Havok`;
+let stableFrames=0, settlingStartedAt=0, hasStartedDemo=false;
 
-let stableFrames = 0;
-let settlingStartedAt = 0;
+function activePieces(){ return scatter.pieces.filter(p=>!p.metadata?.collected); }
+function freezeActivePieces(){ for(const p of activePieces()){ const body=p.metadata?.aggregate?.body; if(!body)continue; try{const pos=p.getAbsolutePosition().clone(); const q=p.rotationQuaternion?p.rotationQuaternion.clone():BABYLON.Quaternion.FromEulerAngles(p.rotation.x,p.rotation.y,p.rotation.z); p.metadata.lockedPosition=pos.clone();p.metadata.lockedQuaternion=q.clone();body.setLinearVelocity(BABYLON.Vector3.Zero());body.setAngularVelocity(BABYLON.Vector3.Zero());body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);body.setTargetTransform(pos,q);}catch(_){}} }
+function pinActivePieces(){for(const p of activePieces()){const body=p.metadata?.aggregate?.body,pos=p.metadata?.lockedPosition,q=p.metadata?.lockedQuaternion;if(!body||!pos||!q)continue;try{body.setLinearVelocity(BABYLON.Vector3.Zero());body.setAngularVelocity(BABYLON.Vector3.Zero());body.setTargetTransform(pos,q);}catch(_){}}}
+function showScenario(){const s=scenario.snapshot();document.getElementById("hint").textContent=`DEMO ${s.scenario} • цель: ${s.limit} чүкө. Выберите подходящую пару.`;}
+function finishScenario(){selector.clearSelection();selector.updateVisuals(scatter.pieces);store.setState(GameState.FINISHED);document.getElementById("hint").textContent=`${scenario.resultText()} • Нажмите «РАССЫПАТЬ» для следующего сценария.`;}
 
-function activePieces() {
-  return scatter.pieces.filter(p => !p.metadata?.collected);
-}
-
-function freezeActivePieces() {
-  for (const p of activePieces()) {
-    const body = p.metadata?.aggregate?.body;
-    if (!body) continue;
-    try {
-      const pos = p.getAbsolutePosition().clone();
-      const q = p.rotationQuaternion
-        ? p.rotationQuaternion.clone()
-        : BABYLON.Quaternion.FromEulerAngles(p.rotation.x, p.rotation.y, p.rotation.z);
-
-      p.metadata.lockedPosition = pos.clone();
-      p.metadata.lockedQuaternion = q.clone();
-
-      body.setLinearVelocity(BABYLON.Vector3.Zero());
-      body.setAngularVelocity(BABYLON.Vector3.Zero());
-      body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
-      body.setTargetTransform(pos, q);
-    } catch (_) {}
-  }
-}
-
-// Havok ANIMATED bodies can continue interpolating slightly after a single
-// setTargetTransform call. Re-apply the exact locked pose every READY frame so
-// already-used source pieces cannot slowly drift/"float" after a flick.
-function pinActivePieces() {
-  for (const p of activePieces()) {
-    const body = p.metadata?.aggregate?.body;
-    const pos = p.metadata?.lockedPosition;
-    const q = p.metadata?.lockedQuaternion;
-    if (!body || !pos || !q) continue;
-    try {
-      body.setLinearVelocity(BABYLON.Vector3.Zero());
-      body.setAngularVelocity(BABYLON.Vector3.Zero());
-      body.setTargetTransform(pos, q);
-    } catch (_) {}
-  }
-}
-
-new InputController(
-  scene,
-  canvas,
-  store,
-  selector,
-  () => activePieces(),
-  (source, target) => {
-    if (!source || !target) return;
-
-    // The selected source is about to move, so discard its old lock.
-    if (source.metadata) {
-      source.metadata.lockedPosition = null;
-      source.metadata.lockedQuaternion = null;
-    }
-
-    selector.clearSelection();
-    selector.updateVisuals(scatter.pieces);
-    labels.refresh(scatter.pieces, false);
-    store.setState(GameState.FLICKING);
-    document.getElementById("hint").textContent =
-      `${source.metadata.id} → ${target.metadata.id}`;
-
-    const moved = flickToTarget(scene, source, target, (ok) => {
-      if (!ok) {
-        freezeActivePieces();
-        updateAllOrientations(activePieces());
-        labels.refresh(activePieces(), store.debug && CONFIG.debug.labels);
-        updatePairCount();
-        store.setState(GameState.READY);
-        document.getElementById("hint").textContent = "Не удалось запустить щелчок.";
-        return;
-      }
-
-      // Lock the source immediately at the exact end of the strike. Do not wait
-      // for the collector animation to finish; this is where the visible drift
-      // of the struck-with chuko was occurring.
-      freezeActivePieces();
-
-      document.getElementById("hint").textContent =
-        `${target.metadata.id} взят. Переносим в УПАЙ…`;
-
-      const collecting = collector.collect(target, result => {
-        freezeActivePieces();
-        updateAllOrientations(activePieces());
-        labels.refresh(activePieces(), store.debug && CONFIG.debug.labels);
-        selector.clearSelection();
-        selector.updateVisuals(scatter.pieces);
-        updatePairCount();
-        store.setState(GameState.READY);
-
-        if (!result) {
-          document.getElementById("hint").textContent =
-            "Чүкө собран. Выберите следующую пару.";
-          return;
-        }
-
-        if (result.allComplete) {
-          document.getElementById("hint").textContent =
-            "2 УПАЙ! Тестовый цикл сбора завершён.";
-        } else if (result.total === 3) {
-          document.getElementById("hint").textContent =
-            "1 УПАЙ! Теперь собираем второй Упай.";
-        } else {
-          document.getElementById("hint").textContent =
-            `УПАЙ ${result.unit}: ${result.progressInUnit}/3. Выберите следующую пару.`;
-        }
-      });
-
-      if (!collecting) {
-        freezeActivePieces();
-        updateAllOrientations(activePieces());
-        labels.refresh(activePieces(), store.debug && CONFIG.debug.labels);
-        updatePairCount();
-        store.setState(GameState.READY);
-      }
-    });
-
-    if (!moved) {
-      freezeActivePieces();
+new InputController(scene,canvas,store,selector,()=>activePieces(),(source,target)=>{
+  if(!source||!target||!scenario.canCollect())return;
+  if(source.metadata){source.metadata.lockedPosition=null;source.metadata.lockedQuaternion=null;}
+  selector.clearSelection();selector.updateVisuals(scatter.pieces);labels.refresh(scatter.pieces,false);store.setState(GameState.FLICKING);
+  document.getElementById("hint").textContent=`${source.metadata.id} → ${target.metadata.id}`;
+  const moved=flickToTarget(scene,source,target,(ok)=>{
+    if(!ok){freezeActivePieces();updateAllOrientations(activePieces());labels.refresh(activePieces(),store.debug&&CONFIG.debug.labels);updatePairCount();store.setState(GameState.READY);showScenario();return;}
+    freezeActivePieces();document.getElementById("hint").textContent=`${target.metadata.id} взят. Переносим в УПАЙ…`;
+    const collecting=collector.collect(target,result=>{
+      const state=scenario.registerCollection();freezeActivePieces();updateAllOrientations(activePieces());labels.refresh(activePieces(),store.debug&&CONFIG.debug.labels);selector.clearSelection();selector.updateVisuals(scatter.pieces);updatePairCount();
+      if(state.finished){finishScenario();return;}
       store.setState(GameState.READY);
-      document.getElementById("hint").textContent = "Не удалось запустить щелчок.";
-    }
-  }
-);
-
-function beginScatter() {
-  selector.clearSelection();
-  labels.refresh(scatter.pieces, false);
-  collector.reset();
-  for (const p of scatter.pieces) {
-    if (p.metadata) {
-      p.metadata.lockedPosition = null;
-      p.metadata.lockedQuaternion = null;
-    }
-  }
-  store.setState(GameState.SCATTERING);
-  scatter.scatter();
-  stableFrames = 0;
-  settlingStartedAt = performance.now();
-  store.setState(GameState.SETTLING);
-  document.getElementById("hint").textContent = "Чүкө рассыпаются…";
-}
-
-function reset() {
-  selector.clearSelection();
-  labels.refresh(scatter.pieces, false);
-  scatter.clear();
-  collector.reset();
-  document.getElementById("pairCount").textContent = "0";
-  document.getElementById("selected").textContent = "—";
-  store.setState(GameState.INIT);
-  document.getElementById("hint").textContent =
-    "Нажмите «РАССЫПАТЬ». Затем выберите чүкө и ярко-зелёную цель.";
-}
-
-function allStable() {
-  const pieces = activePieces();
-  if (!pieces.length) return false;
-  for (const p of pieces) {
-    const body = p.metadata?.aggregate?.body;
-    if (!body) continue;
-    const lv = body.getLinearVelocity();
-    const av = body.getAngularVelocity();
-    if (
-      lv.length() > CONFIG.physics.sleepLinearThreshold ||
-      av.length() > CONFIG.physics.sleepAngularThreshold
-    ) return false;
-  }
-  return true;
-}
-
-function finalizeLayout() {
-  const pieces = activePieces();
-  updateAllOrientations(pieces);
-  const check = validateLayout(pieces);
-
-  freezeActivePieces();
-
-  labels.refresh(pieces, store.debug && CONFIG.debug.labels);
-  selector.updateVisuals(scatter.pieces);
-  document.getElementById("pairCount").textContent = String(check.pairCount);
-  store.setState(GameState.READY);
-
-  document.getElementById("hint").textContent = check.valid
-    ? "Выберите чүкө. Совпадающие цели загорятся ярко-зелёным."
-    : `Расклад принят без перерасклада. DEBUG: ${check.issues.join(", ") || "OK"}`;
-}
-
-function updatePairCount() {
-  const check = validateLayout(activePieces());
-  document.getElementById("pairCount").textContent = String(check.pairCount);
-}
-
-document.getElementById("scatterBtn").addEventListener("click", beginScatter);
-document.getElementById("resetBtn").addEventListener("click", reset);
-document.getElementById("debugBtn").addEventListener("click", () => {
-  store.debug = !store.debug;
-  document.getElementById("debugBtn").textContent = `DEBUG: ${store.debug ? "ON" : "OFF"}`;
-  labels.refresh(activePieces(), store.debug && CONFIG.debug.labels);
+      const progress=result?.total??state.collected;
+      document.getElementById("hint").textContent=`DEMO ${state.scenario} • собрано ${progress}/${state.limit}. Выберите следующую пару.`;
+    });
+    if(!collecting){freezeActivePieces();store.setState(GameState.READY);showScenario();}
+  });
+  if(!moved){freezeActivePieces();store.setState(GameState.READY);showScenario();}
 });
 
+function beginScatter(){selector.clearSelection();labels.refresh(scatter.pieces,false);collector.reset();scenario.reset({advanceDemo:hasStartedDemo});hasStartedDemo=true;for(const p of scatter.pieces){if(p.metadata){p.metadata.lockedPosition=null;p.metadata.lockedQuaternion=null;}}store.setState(GameState.SCATTERING);scatter.scatter();stableFrames=0;settlingStartedAt=performance.now();store.setState(GameState.SETTLING);document.getElementById("hint").textContent=`Чүкө рассыпаются… DEMO ${scenario.snapshot().scenario}`;}
+function reset(){selector.clearSelection();labels.refresh(scatter.pieces,false);scatter.clear();collector.reset();scenario.reset();hasStartedDemo=false;document.getElementById("pairCount").textContent="0";document.getElementById("selected").textContent="—";store.setState(GameState.INIT);document.getElementById("hint").textContent="Нажмите «РАССЫПАТЬ». Демо-сценарии: ZERO_B → ZERO_A → ONE → TWO.";}
+function allStable(){const pieces=activePieces();if(!pieces.length)return false;for(const p of pieces){const body=p.metadata?.aggregate?.body;if(!body)continue;const lv=body.getLinearVelocity(),av=body.getAngularVelocity();if(lv.length()>CONFIG.physics.sleepLinearThreshold||av.length()>CONFIG.physics.sleepAngularThreshold)return false;}return true;}
+function finalizeLayout(){const pieces=activePieces();updateAllOrientations(pieces);const check=validateLayout(pieces);freezeActivePieces();labels.refresh(pieces,store.debug&&CONFIG.debug.labels);selector.updateVisuals(scatter.pieces);document.getElementById("pairCount").textContent=String(check.pairCount);store.setState(GameState.READY);showScenario();}
+function updatePairCount(){const check=validateLayout(activePieces());document.getElementById("pairCount").textContent=String(check.pairCount);}
+
+document.getElementById("scatterBtn").addEventListener("click",beginScatter);document.getElementById("resetBtn").addEventListener("click",reset);document.getElementById("debugBtn").addEventListener("click",()=>{store.debug=!store.debug;document.getElementById("debugBtn").textContent=`DEBUG: ${store.debug?"ON":"OFF"}`;labels.refresh(activePieces(),store.debug&&CONFIG.debug.labels);});
 collector.reset();
-
-engine.runRenderLoop(() => {
-  document.getElementById("fps").textContent = engine.getFps().toFixed(0);
-
-  if (store.state === GameState.SETTLING) {
-    if (allStable()) stableFrames++;
-    else stableFrames = 0;
-
-    const timedOut = performance.now() - settlingStartedAt > 7000;
-    if (stableFrames >= CONFIG.physics.stableFramesRequired || timedOut) {
-      finalizeLayout();
-      stableFrames = 0;
-    }
-  }
-
-  if (store.state === GameState.READY) pinActivePieces();
-  if (store.debug) labels.follow(activePieces());
-  selector.followRings();
-  scene.render();
-});
-
-window.addEventListener("resize", () => engine.resize());
+engine.runRenderLoop(()=>{document.getElementById("fps").textContent=engine.getFps().toFixed(0);if(store.state===GameState.SETTLING){if(allStable())stableFrames++;else stableFrames=0;const timedOut=performance.now()-settlingStartedAt>7000;if(stableFrames>=CONFIG.physics.stableFramesRequired||timedOut){finalizeLayout();stableFrames=0;}}if(store.state===GameState.READY)pinActivePieces();if(store.debug)labels.follow(activePieces());selector.followRings();scene.render();});
+window.addEventListener("resize",()=>engine.resize());
