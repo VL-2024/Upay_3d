@@ -1,11 +1,11 @@
 import { CONFIG } from "./config.js";
 
 /**
- * Deterministic technical flick for v0.1.8.
- * Both source and target stay under controlled ANIMATED motion through contact.
- * The target is handed to CollectorSystem first; only after that is the source
- * returned to DYNAMIC with zero residual velocity. This prevents the first
- * source piece from being launched off the lower edge.
+ * Deterministic technical flick for v0.1.9.
+ * Source and target are kept under controlled ANIMATED motion through contact.
+ * After contact the target is collected, while the source REMAINS animated
+ * at rest instead of being returned to DYNAMIC. This removes the Havok
+ * launch edge case that was still occurring on the first move.
  */
 export function flickToTarget(scene, source, target, onDone) {
   const body = source?.metadata?.aggregate?.body;
@@ -30,15 +30,24 @@ export function flickToTarget(scene, source, target, onDone) {
   }
 
   const direction = flat.normalize();
-  const contactGap = 0.14;
+  const contactGap = 0.18;
   const travel = Math.max(0.10, distance - contactGap);
-  const animatedEnd = start.add(direction.scale(travel));
+  const rawEnd = start.add(direction.scale(travel));
+
+  // Hard clamp inside the visible play field. Even if target is close to an edge,
+  // the source center can never be animated outside the safe playable area.
+  const halfW = CONFIG.field.width / 2 - Math.max(CONFIG.field.safeMargin, 0.65);
+  const halfD = CONFIG.field.depth / 2 - Math.max(CONFIG.field.safeMargin, 0.85);
+  const animatedEnd = new BABYLON.Vector3(
+    clamp(rawEnd.x, -halfW, halfW),
+    Math.max(start.y, 0.24),
+    clamp(rawEnd.z, -halfD, halfD)
+  );
 
   const startQ = source.rotationQuaternion
     ? source.rotationQuaternion.clone()
     : BABYLON.Quaternion.FromEulerAngles(source.rotation.x, source.rotation.y, source.rotation.z);
 
-  // Freeze target and fully control source through the visual contact.
   targetBody.setLinearVelocity(BABYLON.Vector3.Zero());
   targetBody.setAngularVelocity(BABYLON.Vector3.Zero());
   targetBody.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
@@ -58,7 +67,7 @@ export function flickToTarget(scene, source, target, onDone) {
 
     const spin = BABYLON.Quaternion.RotationAxis(
       new BABYLON.Vector3(-direction.z, 0, direction.x),
-      e * Math.min(2.0, distance * 0.45)
+      e * Math.min(1.6, distance * 0.35)
     );
     const q = spin.multiply(startQ);
 
@@ -68,26 +77,20 @@ export function flickToTarget(scene, source, target, onDone) {
     if (t >= 1) {
       scene.onBeforeRenderObservable.remove(observer);
 
-      // Keep SOURCE animated while callback starts collection and immediately
-      // disposes TARGET's Havok aggregate. No physical impulse is applied.
-      onDone?.(true);
+      // Keep source fully controlled and stationary after contact.
+      // Do NOT switch it back to DYNAMIC here: that transition was the
+      // remaining cause of the first-piece launch on some Havok frames.
+      body.setLinearVelocity(BABYLON.Vector3.Zero());
+      body.setAngularVelocity(BABYLON.Vector3.Zero());
+      body.setTargetTransform(animatedEnd, q);
 
-      // Once target has been removed from field physics, return source to
-      // normal physics at rest. Deliberately no residual push/spin.
-      window.setTimeout(() => {
-        try {
-          if (!source?.metadata?.aggregate?.body) return;
-          const sourceBody = source.metadata.aggregate.body;
-          sourceBody.setTargetTransform(animatedEnd, q);
-          sourceBody.setLinearVelocity(BABYLON.Vector3.Zero());
-          sourceBody.setAngularVelocity(BABYLON.Vector3.Zero());
-          sourceBody.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC);
-          sourceBody.setLinearVelocity(BABYLON.Vector3.Zero());
-          sourceBody.setAngularVelocity(BABYLON.Vector3.Zero());
-        } catch (_) {}
-      }, 80);
+      onDone?.(true);
     }
   });
 
   return true;
+}
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
 }
