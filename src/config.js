@@ -1,5 +1,5 @@
 export const CONFIG = {
-  version: "0.1.8-alpha",
+  version: "0.1.9-alpha",
   normalCount: 15,
   khanScale: 1.12,
 
