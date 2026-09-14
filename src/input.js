@@ -29,12 +29,12 @@ export class InputController {
 
         if (moved < 22) {
           if (!this.store.selected) {
-            if (upMesh && !upMesh.metadata.isKhan) {
+            if (upMesh && !upMesh.metadata.isKhan && !upMesh.metadata.collected) {
               this.selector.select(upMesh, this.getPieces(), false);
             }
           } else if (upMesh && this.selector.isValidTarget(upMesh)) {
             this.onFlick(this.store.selected, upMesh);
-          } else if (upMesh && !upMesh.metadata.isKhan) {
+          } else if (upMesh && !upMesh.metadata.isKhan && !upMesh.metadata.collected) {
             this.selector.select(upMesh, this.getPieces(), false);
           } else {
             this.selector.clearSelection();
@@ -42,6 +42,10 @@ export class InputController {
           }
         } else if (this.store.selected || this.down?.mesh) {
           const source = this.store.selected || this.down.mesh;
+          if (source?.metadata?.collected) {
+            this.down = null;
+            return;
+          }
           if (source && !this.store.selected) {
             this.selector.select(source, this.getPieces(), false);
           }
@@ -61,12 +65,13 @@ export class InputController {
       mesh => !!mesh?.metadata?.id || !!mesh?.metadata?.physicsMesh
     );
     if (!pick?.hit || !pick.pickedMesh) return null;
-    return pick.pickedMesh.metadata?.physicsMesh || pick.pickedMesh;
+    const piece = pick.pickedMesh.metadata?.physicsMesh || pick.pickedMesh;
+    return piece?.metadata?.collected ? null : piece;
   }
 
   bestTargetBySwipe(source, dx, dy) {
-    const targets = this.store.validTargets;
-    if (!source || targets.length === 0) return null;
+    const targets = this.store.validTargets.filter(t => !t.metadata?.collected);
+    if (!source || source.metadata?.collected || targets.length === 0) return null;
 
     const mag = Math.hypot(dx, dy);
     if (mag < 10) return null;
