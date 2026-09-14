@@ -17,17 +17,14 @@ export class PairSelector {
     this.store.selected = source;
     const state = source.metadata.state;
 
-    const targets = pieces.filter(p =>
-      p !== source &&
-      !p.metadata?.collected &&
-      p.metadata?.state === state &&
-      (allowKhan || !p.metadata?.isKhan)
-    );
+    const targets = pieces.filter(p => {
+      if (p === source || p.metadata?.collected) return false;
+      if (p.metadata?.isKhan) return allowKhan;
+      return p.metadata?.state === state;
+    });
 
     this.store.validTargets = targets;
-    document.getElementById("selected").textContent =
-      `${source.metadata.id} / ${source.metadata.state}`;
-
+    document.getElementById("selected").textContent = `${source.metadata.id} / ${source.metadata.state}`;
     this.updateVisuals(pieces);
     return targets;
   }
@@ -44,7 +41,7 @@ export class PairSelector {
   makeRing(piece, color) {
     const ring = BABYLON.MeshBuilder.CreateTorus(
       `ring_${piece.metadata.id}_${Math.random()}`,
-      { diameter: 1.15, thickness: 0.075, tessellation: 32 },
+      { diameter: piece.metadata?.isKhan ? 1.38 : 1.15, thickness: 0.085, tessellation: 32 },
       this.scene
     );
     ring.rotation.x = Math.PI / 2;
@@ -58,39 +55,37 @@ export class PairSelector {
     mat.disableLighting = true;
     mat.alpha = 0.95;
     ring.material = mat;
-
     this.rings.set(piece, ring);
   }
 
   updateVisuals(pieces) {
     this.clearRings();
-
     for (const p of pieces) {
       const shell = p.metadata?.shell;
       if (!shell?.material) continue;
-
       shell.material.emissiveColor = p.metadata.isKhan
-        ? new BABYLON.Color3(0.06, 0.035, 0.0)
+        ? new BABYLON.Color3(0.08, 0.05, 0.0)
         : new BABYLON.Color3(0, 0, 0);
-
       if (p.metadata?.collected) continue;
 
       if (p === this.store.selected) {
         shell.material.emissiveColor = new BABYLON.Color3(0.55, 0.34, 0.02);
         this.makeRing(p, new BABYLON.Color3(1.0, 0.72, 0.08));
       } else if (this.store.validTargets.includes(p)) {
-        shell.material.emissiveColor = new BABYLON.Color3(0.10, 0.72, 0.08);
-        this.makeRing(p, new BABYLON.Color3(0.15, 1.0, 0.18));
+        if (p.metadata?.isKhan) {
+          shell.material.emissiveColor = new BABYLON.Color3(0.95, 0.55, 0.02);
+          this.makeRing(p, new BABYLON.Color3(1.0, 0.68, 0.06));
+        } else {
+          shell.material.emissiveColor = new BABYLON.Color3(0.10, 0.72, 0.08);
+          this.makeRing(p, new BABYLON.Color3(0.15, 1.0, 0.18));
+        }
       }
     }
   }
 
   followRings() {
     for (const [piece, ring] of this.rings.entries()) {
-      if (piece.metadata?.collected) {
-        ring.setEnabled(false);
-        continue;
-      }
+      if (piece.metadata?.collected) { ring.setEnabled(false); continue; }
       ring.position.x = piece.position.x;
       ring.position.z = piece.position.z;
       ring.position.y = Math.max(0.10, piece.position.y + 0.03);
