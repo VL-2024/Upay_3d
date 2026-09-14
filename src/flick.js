@@ -1,11 +1,11 @@
 import { CONFIG } from "./config.js";
 
 /**
- * Deterministic technical flick for v0.1.7.
- * The target is temporarily frozen as an ANIMATED body so the incoming
- * piece can visibly touch it without Havok launching the target out of the field.
- * Financial/game outcome is scenario-driven, so a successful visual hit must
- * not depend on uncontrolled collision energy.
+ * Deterministic technical flick for v0.1.8.
+ * Both source and target stay under controlled ANIMATED motion through contact.
+ * The target is handed to CollectorSystem first; only after that is the source
+ * returned to DYNAMIC with zero residual velocity. This prevents the first
+ * source piece from being launched off the lower edge.
  */
 export function flickToTarget(scene, source, target, onDone) {
   const body = source?.metadata?.aggregate?.body;
@@ -24,14 +24,13 @@ export function flickToTarget(scene, source, target, onDone) {
   const delta = targetPos.subtract(start);
   const flat = new BABYLON.Vector3(delta.x, 0, delta.z);
   const distance = flat.length();
-
   if (distance < 0.15) {
     onDone?.(false);
     return false;
   }
 
   const direction = flat.normalize();
-  const contactGap = 0.10;
+  const contactGap = 0.14;
   const travel = Math.max(0.10, distance - contactGap);
   const animatedEnd = start.add(direction.scale(travel));
 
@@ -39,7 +38,7 @@ export function flickToTarget(scene, source, target, onDone) {
     ? source.rotationQuaternion.clone()
     : BABYLON.Quaternion.FromEulerAngles(source.rotation.x, source.rotation.y, source.rotation.z);
 
-  // Freeze the target for the duration of the visual contact.
+  // Freeze target and fully control source through the visual contact.
   targetBody.setLinearVelocity(BABYLON.Vector3.Zero());
   targetBody.setAngularVelocity(BABYLON.Vector3.Zero());
   targetBody.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
@@ -62,20 +61,31 @@ export function flickToTarget(scene, source, target, onDone) {
       e * Math.min(2.0, distance * 0.45)
     );
     const q = spin.multiply(startQ);
+
     body.setTargetTransform(pos, q);
     targetBody.setTargetTransform(targetPos, targetQ);
 
     if (t >= 1) {
       scene.onBeforeRenderObservable.remove(observer);
 
-      // Source returns to normal physics but with almost no residual energy.
-      body.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC);
-      body.setLinearVelocity(new BABYLON.Vector3(direction.x * 0.18, 0, direction.z * 0.18));
-      body.setAngularVelocity(new BABYLON.Vector3(-direction.z * 0.20, 0.03, direction.x * 0.20));
+      // Keep SOURCE animated while callback starts collection and immediately
+      // disposes TARGET's Havok aggregate. No physical impulse is applied.
+      onDone?.(true);
 
-      // Keep the target frozen until CollectorSystem removes it from physics.
-      // Callback happens immediately after the contact is visible.
-      window.setTimeout(() => onDone?.(true), 90);
+      // Once target has been removed from field physics, return source to
+      // normal physics at rest. Deliberately no residual push/spin.
+      window.setTimeout(() => {
+        try {
+          if (!source?.metadata?.aggregate?.body) return;
+          const sourceBody = source.metadata.aggregate.body;
+          sourceBody.setTargetTransform(animatedEnd, q);
+          sourceBody.setLinearVelocity(BABYLON.Vector3.Zero());
+          sourceBody.setAngularVelocity(BABYLON.Vector3.Zero());
+          sourceBody.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC);
+          sourceBody.setLinearVelocity(BABYLON.Vector3.Zero());
+          sourceBody.setAngularVelocity(BABYLON.Vector3.Zero());
+        } catch (_) {}
+      }, 80);
     }
   });
 
