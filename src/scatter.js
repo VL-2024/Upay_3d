@@ -38,11 +38,11 @@ export class ScatterSystem {
   }
 
   buildCells(total) {
-    // Keep all spawn cells comfortably inside the visible rug. The old outer
-    // columns were too close to the physical walls, so rotating pieces could
-    // settle half outside the field.
+    // Keep outer columns inside the visible portrait camera, not merely inside
+    // the physical rug. This prevents rotated pieces from being clipped by the
+    // left/right screen edges.
     const cells = [];
-    const xs = [-2.35, -0.78, 0.78, 2.35];
+    const xs = [-2.05, -0.68, 0.68, 2.05];
     const zs = [-3.25, -1.35, 0.55, 2.30];
     for (const z of zs) for (const x of xs) cells.push({ x, z });
 
@@ -56,7 +56,7 @@ export class ScatterSystem {
   makeSpawn(cell, i) {
     return {
       position: new BABYLON.Vector3(
-        cell.x + rand(-0.22, 0.22),
+        cell.x + rand(-0.18, 0.18),
         rand(CONFIG.piece.spawnHeightMin, CONFIG.piece.spawnHeightMax) + i * 0.018,
         cell.z + rand(-0.26, 0.26)
       ),
@@ -71,7 +71,7 @@ export class ScatterSystem {
   applyScatterImpulse(mesh) {
     const body = mesh.metadata.aggregate.body;
     body.applyImpulse(
-      new BABYLON.Vector3(rand(-0.07, 0.07), 0, rand(-0.07, 0.07)),
+      new BABYLON.Vector3(rand(-0.05, 0.05), 0, rand(-0.07, 0.07)),
       mesh.getAbsolutePosition()
     );
   }
