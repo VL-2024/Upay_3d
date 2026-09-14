@@ -1,7 +1,7 @@
 import { CONFIG } from "./config.js";
 import { createChukoVisual } from "./chuko-visual.js";
 
-const COLORS=[[.91,.33,.31],[.20,.58,.75],[.95,.75,.28],[.25,.65,.52],[.80,.56,.74],[.88,.88,.82]];
+const COLORS=[[1.00,.20,.18],[.08,.62,.95],[1.00,.76,.08],[.12,.78,.48],[.95,.48,.82],[.96,.96,.92]];
 
 export function createChuko(scene,index,isKhan=false,spawn=null){
   const scale=isKhan?CONFIG.khanScale:1;
@@ -16,9 +16,16 @@ export function createChuko(scene,index,isKhan=false,spawn=null){
 
   const mat=new BABYLON.PBRMaterial(`mat_${index}_${isKhan}`,scene);
   if(isKhan){
-    mat.albedoColor=new BABYLON.Color3(.92,.63,.13);mat.metallic=.78;mat.roughness=.24;mat.emissiveColor=new BABYLON.Color3(.035,.018,0);
+    mat.albedoColor=new BABYLON.Color3(1.00,.66,.08);
+    mat.metallic=.72;
+    mat.roughness=.30;
+    mat.emissiveColor=new BABYLON.Color3(.12,.055,.004);
   }else{
-    const c=COLORS[index%COLORS.length];mat.albedoColor=new BABYLON.Color3(...c);mat.metallic=.04;mat.roughness=.32;
+    const c=COLORS[index%COLORS.length];
+    mat.albedoColor=new BABYLON.Color3(...c);
+    mat.metallic=0;
+    mat.roughness=.40;
+    mat.emissiveColor=new BABYLON.Color3(c[0]*.10,c[1]*.10,c[2]*.10);
   }
 
   mesh.metadata={id:isKhan?"KHAN":`C${index+1}`,isKhan,state:"UNKNOWN",shell:null,aggregate:null,label:null};
