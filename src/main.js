@@ -34,10 +34,6 @@ function activePieces() {
   return scatter.pieces.filter(p => !p.metadata?.collected);
 }
 
-// After the initial physical scatter has settled, the board becomes a controlled
-// lottery layout. Active pieces are kept as ANIMATED Havok bodies at their exact
-// settled transforms. This prevents slow drift and stops neighbouring chuko from
-// being pushed outside the field by later visual flicks.
 function freezeActivePieces() {
   for (const p of activePieces()) {
     const body = p.metadata?.aggregate?.body;
@@ -47,9 +43,30 @@ function freezeActivePieces() {
       const q = p.rotationQuaternion
         ? p.rotationQuaternion.clone()
         : BABYLON.Quaternion.FromEulerAngles(p.rotation.x, p.rotation.y, p.rotation.z);
+
+      p.metadata.lockedPosition = pos.clone();
+      p.metadata.lockedQuaternion = q.clone();
+
       body.setLinearVelocity(BABYLON.Vector3.Zero());
       body.setAngularVelocity(BABYLON.Vector3.Zero());
       body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
+      body.setTargetTransform(pos, q);
+    } catch (_) {}
+  }
+}
+
+// Havok ANIMATED bodies can continue interpolating slightly after a single
+// setTargetTransform call. Re-apply the exact locked pose every READY frame so
+// already-used source pieces cannot slowly drift/"float" after a flick.
+function pinActivePieces() {
+  for (const p of activePieces()) {
+    const body = p.metadata?.aggregate?.body;
+    const pos = p.metadata?.lockedPosition;
+    const q = p.metadata?.lockedQuaternion;
+    if (!body || !pos || !q) continue;
+    try {
+      body.setLinearVelocity(BABYLON.Vector3.Zero());
+      body.setAngularVelocity(BABYLON.Vector3.Zero());
       body.setTargetTransform(pos, q);
     } catch (_) {}
   }
@@ -63,6 +80,12 @@ new InputController(
   () => activePieces(),
   (source, target) => {
     if (!source || !target) return;
+
+    // The selected source is about to move, so discard its old lock.
+    if (source.metadata) {
+      source.metadata.lockedPosition = null;
+      source.metadata.lockedQuaternion = null;
+    }
 
     selector.clearSelection();
     selector.updateVisuals(scatter.pieces);
@@ -81,6 +104,11 @@ new InputController(
         document.getElementById("hint").textContent = "Не удалось запустить щелчок.";
         return;
       }
+
+      // Lock the source immediately at the exact end of the strike. Do not wait
+      // for the collector animation to finish; this is where the visible drift
+      // of the struck-with chuko was occurring.
+      freezeActivePieces();
 
       document.getElementById("hint").textContent =
         `${target.metadata.id} взят. Переносим в УПАЙ…`;
@@ -133,6 +161,12 @@ function beginScatter() {
   selector.clearSelection();
   labels.refresh(scatter.pieces, false);
   collector.reset();
+  for (const p of scatter.pieces) {
+    if (p.metadata) {
+      p.metadata.lockedPosition = null;
+      p.metadata.lockedQuaternion = null;
+    }
+  }
   store.setState(GameState.SCATTERING);
   scatter.scatter();
   stableFrames = 0;
@@ -174,8 +208,6 @@ function finalizeLayout() {
   updateAllOrientations(pieces);
   const check = validateLayout(pieces);
 
-  // Lock the accepted layout. From here on only the chosen source/target are
-  // visually moved by the deterministic flick/collector systems.
   freezeActivePieces();
 
   labels.refresh(pieces, store.debug && CONFIG.debug.labels);
@@ -217,6 +249,7 @@ engine.runRenderLoop(() => {
     }
   }
 
+  if (store.state === GameState.READY) pinActivePieces();
   if (store.debug) labels.follow(activePieces());
   selector.followRings();
   scene.render();
