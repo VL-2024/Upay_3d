@@ -14,47 +14,63 @@ export class ScatterSystem {
 
   scatter() {
     this.clear();
+
+    const total = CONFIG.normalCount + 1;
+    const cells = this.buildCells(total);
+
     for (let i = 0; i < CONFIG.normalCount; i++) {
-      const p = createChuko(this.scene, i, false);
-      this.placeSpawn(p, i);
+      const p = createChuko(this.scene, i, false, this.makeSpawn(cells[i], i));
+      this.applyScatterImpulse(p);
       this.pieces.push(p);
     }
-    const khan = createChuko(this.scene, CONFIG.normalCount, true);
-    this.placeSpawn(khan, CONFIG.normalCount);
+
+    const khan = createChuko(
+      this.scene,
+      CONFIG.normalCount,
+      true,
+      this.makeSpawn(cells[CONFIG.normalCount], CONFIG.normalCount)
+    );
+    this.applyScatterImpulse(khan);
     this.pieces.push(khan);
+
     document.getElementById("pieceCount").textContent = CONFIG.normalCount;
     return this.pieces;
   }
 
-  placeSpawn(mesh, i) {
-    // Stratified 4x4 scatter instead of a radial pile. Each piece gets its own
-    // cell plus jitter, so the settled board fills the field in 2D rather than
-    // collapsing visually into one narrow line.
-    const cols = 4;
-    const rows = 4;
-    const col = i % cols;
-    const row = Math.floor(i / cols) % rows;
-    const xMin = -2.75, xMax = 2.75;
-    const zMin = -3.85, zMax = 2.65;
-    const cellX = (xMax - xMin) / (cols - 1);
-    const cellZ = (zMax - zMin) / (rows - 1);
-    const x = xMin + col * cellX + rand(-0.42, 0.42);
-    const z = zMin + row * cellZ + rand(-0.52, 0.52);
+  buildCells(total) {
+    // 4 columns x 4 rows cover the useful play area. Shuffle the cells each
+    // round so the board stays natural while remaining genuinely two-dimensional.
+    const cells = [];
+    const xs = [-2.75, -0.92, 0.92, 2.75];
+    const zs = [-3.65, -1.55, 0.55, 2.65];
+    for (const z of zs) for (const x of xs) cells.push({ x, z });
 
-    mesh.position.set(
-      x,
-      rand(CONFIG.piece.spawnHeightMin, CONFIG.piece.spawnHeightMax) + i * 0.02,
-      z
-    );
-    mesh.rotationQuaternion = BABYLON.Quaternion.RotationYawPitchRoll(
-      Math.random() * Math.PI * 2,
-      Math.random() * Math.PI * 2,
-      Math.random() * Math.PI * 2
-    );
+    for (let i = cells.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [cells[i], cells[j]] = [cells[j], cells[i]];
+    }
+    return cells.slice(0, total);
+  }
 
+  makeSpawn(cell, i) {
+    return {
+      position: new BABYLON.Vector3(
+        cell.x + rand(-0.34, 0.34),
+        rand(CONFIG.piece.spawnHeightMin, CONFIG.piece.spawnHeightMax) + i * 0.018,
+        cell.z + rand(-0.38, 0.38)
+      ),
+      rotationQuaternion: BABYLON.Quaternion.RotationYawPitchRoll(
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2
+      )
+    };
+  }
+
+  applyScatterImpulse(mesh) {
     const body = mesh.metadata.aggregate.body;
     body.applyImpulse(
-      new BABYLON.Vector3(rand(-0.12, 0.12), 0, rand(-0.12, 0.12)),
+      new BABYLON.Vector3(rand(-0.16, 0.16), 0, rand(-0.16, 0.16)),
       mesh.getAbsolutePosition()
     );
   }
