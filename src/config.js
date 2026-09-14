@@ -1,5 +1,5 @@
 export const CONFIG = {
-  version: "0.1.25-alpha",
+  version: "0.1.26-alpha",
   normalCount: 15,
   khanScale: 1.12,
   field: { width: 6.8, depth: 11.4, thickness: 0.28, wallHeight: 2.4, safeMargin: 0.6 },
