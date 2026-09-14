@@ -1,12 +1,10 @@
 import { CONFIG } from "./config.js";
 
 /**
- * Guaranteed technical flick for v0.1.3:
+ * Guaranteed technical flick for v0.1.4:
  * 1) temporarily moves the source as an ANIMATED Havok body toward the target;
- * 2) stops slightly before contact;
- * 3) returns body to DYNAMIC and gives it a short residual velocity for impact.
- *
- * This avoids the "selected but does not move" problem caused by sleeping dynamic bodies.
+ * 2) moves directly into the contact zone;
+ * 3) returns body to DYNAMIC and gives it a residual impact velocity.
  */
 export function flickToTarget(scene, source, target, onDone) {
   const body = source?.metadata?.aggregate?.body;
@@ -28,7 +26,7 @@ export function flickToTarget(scene, source, target, onDone) {
   }
 
   const direction = flat.normalize();
-  const contactGap = 0.50; // stop just before target, then dynamic impact
+  const contactGap = 0.12; // deliberate contact/overlap zone so the hit cannot stop short
   const travel = Math.max(0.10, distance - contactGap);
   const animatedEnd = start.add(direction.scale(travel));
 
@@ -38,23 +36,20 @@ export function flickToTarget(scene, source, target, onDone) {
         source.rotation.x, source.rotation.y, source.rotation.z
       );
 
-  // Make sure the body is not controlled by sleep / old velocities.
   body.setLinearVelocity(BABYLON.Vector3.Zero());
   body.setAngularVelocity(BABYLON.Vector3.Zero());
   body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
 
-  const duration = Math.max(220, Math.min(520, 180 + distance * 55));
+  const duration = Math.max(260, Math.min(620, 210 + distance * 60));
   const t0 = performance.now();
 
   const observer = scene.onBeforeRenderObservable.add(() => {
     const now = performance.now();
     const t = Math.min(1, (now - t0) / duration);
 
-    // smoothstep
     const e = t * t * (3 - 2 * t);
     const pos = BABYLON.Vector3.Lerp(start, animatedEnd, e);
 
-    // small tactile rotation while sliding
     const spin = BABYLON.Quaternion.RotationAxis(
       new BABYLON.Vector3(-direction.z, 0, direction.x),
       e * Math.min(2.2, distance * 0.55)
@@ -66,7 +61,6 @@ export function flickToTarget(scene, source, target, onDone) {
     if (t >= 1) {
       scene.onBeforeRenderObservable.remove(observer);
 
-      // Return to real physics and let the last centimeters produce collision.
       body.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC);
       body.setAngularVelocity(
         new BABYLON.Vector3(-direction.z * 1.2, 0.2, direction.x * 1.2)
@@ -74,9 +68,10 @@ export function flickToTarget(scene, source, target, onDone) {
 
       const impactSpeed = clamp(
         CONFIG.flick.minSpeed + distance * CONFIG.flick.speedPerUnit,
-        1.35,
-        Math.max(1.8, CONFIG.flick.maxSpeed)
+        2.0,
+        Math.max(2.8, CONFIG.flick.maxSpeed)
       );
+
       body.setLinearVelocity(
         new BABYLON.Vector3(
           direction.x * impactSpeed,
@@ -85,7 +80,7 @@ export function flickToTarget(scene, source, target, onDone) {
         )
       );
 
-      window.setTimeout(() => onDone?.(true), 420);
+      window.setTimeout(() => onDone?.(true), 650);
     }
   });
 
