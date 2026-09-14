@@ -3,7 +3,7 @@ import { GameState } from "./game-state.js";
 export class InputController {
   constructor(scene, canvas, store, selector, getPieces, onFlick, canTargetKhan=()=>false) {
     this.scene=scene; this.canvas=canvas; this.store=store; this.selector=selector; this.getPieces=getPieces; this.onFlick=onFlick; this.canTargetKhan=canTargetKhan;
-    this.down=null; this.aimSector=null; this.lastAimDirection=null; this.aimHalfAngle=BABYLON.Tools.ToRadians(7); this.install();
+    this.down=null; this.aimMeshes=[]; this.lastAimDirection=null; this.aimHalfAngle=BABYLON.Tools.ToRadians(7); this.install();
   }
 
   install() {
@@ -79,44 +79,55 @@ export class InputController {
     const origin=source.getAbsolutePosition().clone();
     origin.y=Math.max(.50,origin.y+.22);
     const length=Math.max(1.25,Math.min(4.8,1.25+dragPixels*.018));
-    const inner=.38;
-    const segments=18;
-    const positions=[],indices=[],colors=[];
+    const inner=.34;
+    const bands=9;
+    const segments=20;
     const centerAngle=Math.atan2(dir.z,dir.x);
+    const blue=new BABYLON.Color3(.05,.55,1.0);
 
-    // Two rings form a 14-degree cone. Vertex alpha fades from the striking
-    // chuko outward, producing a soft directional sector rather than an arrow.
-    for(let ring=0;ring<2;ring++){
-      const r=ring===0?inner:length;
-      const alpha=ring===0?.48:.035;
-      for(let i=0;i<=segments;i++){
-        const a=centerAngle-this.aimHalfAngle+(this.aimHalfAngle*2)*(i/segments);
-        positions.push(origin.x+Math.cos(a)*r,origin.y,origin.z+Math.sin(a)*r);
-        colors.push(1.0,.20,.06,alpha);
+    // Radial blue fade: several thin sector bands with decreasing alpha.
+    // This is more reliable than vertex-alpha on StandardMaterial across browsers.
+    for(let b=0;b<bands;b++){
+      const r0=inner+(length-inner)*(b/bands);
+      const r1=inner+(length-inner)*((b+1)/bands);
+      const t=b/(bands-1);
+      const alpha=.34*Math.pow(1-t,1.45)+.018;
+      const positions=[],indices=[];
+      for(let ring=0;ring<2;ring++){
+        const r=ring===0?r0:r1;
+        for(let i=0;i<=segments;i++){
+          const a=centerAngle-this.aimHalfAngle+(this.aimHalfAngle*2)*(i/segments);
+          positions.push(origin.x+Math.cos(a)*r,origin.y,origin.z+Math.sin(a)*r);
+        }
       }
-    }
-    const row=segments+1;
-    for(let i=0;i<segments;i++){
-      const a=i,b=i+1,c=row+i,d=row+i+1;
-      indices.push(a,c,b,b,c,d);
+      const row=segments+1;
+      for(let i=0;i<segments;i++){
+        const a=i,c=row+i,b1=i+1,d=row+i+1;
+        indices.push(a,c,b1,b1,c,d);
+      }
+      const mesh=new BABYLON.Mesh(`aimSectorBand${b}`,this.scene);
+      const vd=new BABYLON.VertexData();vd.positions=positions;vd.indices=indices;vd.applyToMesh(mesh);
+      const mat=new BABYLON.StandardMaterial(`aimSectorBandMat${b}`,this.scene);
+      mat.diffuseColor=blue;mat.emissiveColor=blue.scale(.72);mat.disableLighting=true;mat.backFaceCulling=false;mat.alpha=alpha;
+      mat.transparencyMode=BABYLON.Material.MATERIAL_ALPHABLEND;
+      mesh.material=mat;mesh.isPickable=false;mesh.renderingGroupId=2;
+      this.aimMeshes.push(mesh);
     }
 
-    const mesh=new BABYLON.Mesh("aimSector",this.scene);
-    const vd=new BABYLON.VertexData();
-    vd.positions=positions;vd.indices=indices;vd.colors=colors;vd.applyToMesh(mesh);
-    const mat=new BABYLON.StandardMaterial("aimSectorMat",this.scene);
-    mat.diffuseColor=new BABYLON.Color3(1,.18,.05);
-    mat.emissiveColor=new BABYLON.Color3(.42,.035,.008);
-    mat.disableLighting=true;mat.backFaceCulling=false;mat.alpha=1;
-    mat.useVertexColors=true;mat.useVertexAlpha=true;
-    mat.transparencyMode=BABYLON.Material.MATERIAL_ALPHABLEND;
-    mesh.material=mat;mesh.isPickable=false;mesh.renderingGroupId=2;
-    this.aimSector=mesh;
+    // Thin boundary lines: only the two sides of the sector, no arrow head.
+    for(const sign of [-1,1]){
+      const a=centerAngle+sign*this.aimHalfAngle;
+      const p0=new BABYLON.Vector3(origin.x+Math.cos(a)*inner,origin.y+.006,origin.z+Math.sin(a)*inner);
+      const p1=new BABYLON.Vector3(origin.x+Math.cos(a)*length,origin.y+.006,origin.z+Math.sin(a)*length);
+      const edge=BABYLON.MeshBuilder.CreateLines(`aimEdge${sign}`,{points:[p0,p1]},this.scene);
+      edge.color=new BABYLON.Color3(.12,.68,1.0);edge.alpha=.72;edge.isPickable=false;edge.renderingGroupId=3;
+      this.aimMeshes.push(edge);
+    }
   }
 
   clearAim(){
-    if(this.aimSector){const mat=this.aimSector.material;this.aimSector.dispose();mat?.dispose();}
-    this.aimSector=null;
+    for(const mesh of this.aimMeshes){const mat=mesh?.material;mesh?.dispose();mat?.dispose?.();}
+    this.aimMeshes=[];
   }
 
   bestTargetByDirection(source,dir){
