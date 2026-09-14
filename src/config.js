@@ -1,5 +1,5 @@
 export const CONFIG = {
-  version: "0.1.6-alpha",
+  version: "0.1.7-alpha",
   normalCount: 15,
   khanScale: 1.12,
 
@@ -8,7 +8,7 @@ export const CONFIG = {
   piece: {
     width: 0.62, height: 1.18, depth: 0.44,
     spawnHeightMin: 4.6, spawnHeightMax: 6.4,
-    spawnRadiusX: 3.35, spawnRadiusZ: 4.65
+    spawnRadiusX: 3.35, spawnRadiusZ: 3.35
   },
   physics: {
     gravity: -9.81,
