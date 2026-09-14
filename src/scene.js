@@ -54,27 +54,28 @@ function createBoundary(scene){
   line.renderingGroupId=1;
 }
 
-// Invisible tall physical fence whose INNER face is exactly on the blue
-// play-area line. During the dynamic scatter, a chuko's collision box cannot
-// cross that line at all, so there is no later visible correction/teleport.
-// After settling, gameplay uses ANIMATED bodies, so scripted strikes can still
-// cross the line when the scenario requires a successful knock-out.
+// The visible capsule is longer than the technical root collision box.
+// Therefore the scatter fence is moved inward from the blue line by a visual
+// safety inset, so the whole rendered chuko stays inside the line at all times.
 function createScatterFence(scene){
   const a=CONFIG.playArea;
-  const halfW=a.width/2,halfD=a.depth/2,c=a.centerZ??0;
-  const t=.16,h=8.0,y=h/2;
+  const visualInset=a.scatterFenceInset??.46;
+  const halfW=a.width/2-visualInset;
+  const halfD=a.depth/2-visualInset;
+  const c=a.centerZ??0;
+  const t=.28,h=8.0,y=h/2;
   const defs=[
-    ["scatterFenceL",t,h,a.depth+t,-halfW-t/2,y,c],
-    ["scatterFenceR",t,h,a.depth+t,halfW+t/2,y,c],
-    ["scatterFenceT",a.width+t,h,t,0,y,c-halfD-t/2],
-    ["scatterFenceB",a.width+t,h,t,0,y,c+halfD+t/2]
+    ["scatterFenceL",t,h,halfD*2+t,-halfW-t/2,y,c],
+    ["scatterFenceR",t,h,halfD*2+t,halfW+t/2,y,c],
+    ["scatterFenceT",halfW*2+t,h,t,0,y,c-halfD-t/2],
+    ["scatterFenceB",halfW*2+t,h,t,0,y,c+halfD+t/2]
   ];
   for(const[name,w,hh,d,x,yy,z]of defs){
     const m=BABYLON.MeshBuilder.CreateBox(name,{width:w,height:hh,depth:d},scene);
     m.position.set(x,yy,z);
     m.isVisible=false;
     m.isPickable=false;
-    new BABYLON.PhysicsAggregate(m,BABYLON.PhysicsShapeType.BOX,{mass:0,friction:.78,restitution:.01},scene);
+    new BABYLON.PhysicsAggregate(m,BABYLON.PhysicsShapeType.BOX,{mass:0,friction:.82,restitution:.01},scene);
   }
 }
 
