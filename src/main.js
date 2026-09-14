@@ -34,6 +34,27 @@ function activePieces() {
   return scatter.pieces.filter(p => !p.metadata?.collected);
 }
 
+// After the initial physical scatter has settled, the board becomes a controlled
+// lottery layout. Active pieces are kept as ANIMATED Havok bodies at their exact
+// settled transforms. This prevents slow drift and stops neighbouring chuko from
+// being pushed outside the field by later visual flicks.
+function freezeActivePieces() {
+  for (const p of activePieces()) {
+    const body = p.metadata?.aggregate?.body;
+    if (!body) continue;
+    try {
+      const pos = p.getAbsolutePosition().clone();
+      const q = p.rotationQuaternion
+        ? p.rotationQuaternion.clone()
+        : BABYLON.Quaternion.FromEulerAngles(p.rotation.x, p.rotation.y, p.rotation.z);
+      body.setLinearVelocity(BABYLON.Vector3.Zero());
+      body.setAngularVelocity(BABYLON.Vector3.Zero());
+      body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
+      body.setTargetTransform(pos, q);
+    } catch (_) {}
+  }
+}
+
 new InputController(
   scene,
   canvas,
@@ -52,6 +73,7 @@ new InputController(
 
     const moved = flickToTarget(scene, source, target, (ok) => {
       if (!ok) {
+        freezeActivePieces();
         updateAllOrientations(activePieces());
         labels.refresh(activePieces(), store.debug && CONFIG.debug.labels);
         updatePairCount();
@@ -64,6 +86,7 @@ new InputController(
         `${target.metadata.id} взят. Переносим в УПАЙ…`;
 
       const collecting = collector.collect(target, result => {
+        freezeActivePieces();
         updateAllOrientations(activePieces());
         labels.refresh(activePieces(), store.debug && CONFIG.debug.labels);
         selector.clearSelection();
@@ -90,6 +113,7 @@ new InputController(
       });
 
       if (!collecting) {
+        freezeActivePieces();
         updateAllOrientations(activePieces());
         labels.refresh(activePieces(), store.debug && CONFIG.debug.labels);
         updatePairCount();
@@ -98,6 +122,7 @@ new InputController(
     });
 
     if (!moved) {
+      freezeActivePieces();
       store.setState(GameState.READY);
       document.getElementById("hint").textContent = "Не удалось запустить щелчок.";
     }
@@ -148,6 +173,10 @@ function finalizeLayout() {
   const pieces = activePieces();
   updateAllOrientations(pieces);
   const check = validateLayout(pieces);
+
+  // Lock the accepted layout. From here on only the chosen source/target are
+  // visually moved by the deterministic flick/collector systems.
+  freezeActivePieces();
 
   labels.refresh(pieces, store.debug && CONFIG.debug.labels);
   selector.updateVisuals(scatter.pieces);
