@@ -1,1 +1,38 @@
-export const CONFIG={version:"0.1.0-alpha",normalCount:15,khanScale:1.12,field:{width:8.4,depth:12.6,thickness:.28,wallHeight:1.5,safeMargin:.6},camera:{alpha:Math.PI/2,beta:.44,radius:16.5,targetY:0,fov:.72},piece:{width:.62,height:1.18,depth:.44,spawnHeightMin:4.6,spawnHeightMax:6.4,spawnRadiusX:2.8,spawnRadiusZ:4.1},physics:{gravity:-9.81,mass:.19,friction:.82,restitution:.08,linearDamping:.32,angularDamping:.48,sleepLinearThreshold:.09,sleepAngularThreshold:.12,stableFramesRequired:28},layout:{minDistance:.62,maxOverlapsAllowed:1,requiredPairCount:2,maxRerolls:5},flick:{minForce:.42,maxForce:1.45,forcePerUnit:.19,upwardBias:.035,correction:.10},debug:{labels:true,showPairLines:false}};
+export const CONFIG = {
+  version: "0.1.2-alpha",
+  normalCount: 15,
+  khanScale: 1.12,
+
+  field: { width: 8.4, depth: 12.6, thickness: 0.28, wallHeight: 1.5, safeMargin: 0.6 },
+  camera: { alpha: Math.PI / 2, beta: 0.44, radius: 16.5, targetY: 0, fov: 0.72 },
+  piece: {
+    width: 0.62, height: 1.18, depth: 0.44,
+    spawnHeightMin: 4.6, spawnHeightMax: 6.4,
+    spawnRadiusX: 3.35, spawnRadiusZ: 4.65
+  },
+  physics: {
+    gravity: -9.81,
+    mass: 0.19,
+    friction: 0.72,
+    restitution: 0.08,
+    linearDamping: 0.30,
+    angularDamping: 0.46,
+    sleepLinearThreshold: 0.09,
+    sleepAngularThreshold: 0.12,
+    stableFramesRequired: 24
+  },
+  layout: {
+    minDistance: 0.58,
+    maxOverlapsAllowed: 2,
+    requiredPairCount: 1,
+    maxRerolls: 0
+  },
+  flick: {
+    minSpeed: 2.2,
+    maxSpeed: 5.8,
+    speedPerUnit: 0.82,
+    upwardSpeed: 0.05,
+    settleDelayMs: 1250
+  },
+  debug: { labels: true, showPairLines: false }
+};
