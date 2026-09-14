@@ -1,9 +1,9 @@
 export const CONFIG = {
-  version: "0.1.5-alpha",
+  version: "0.1.6-alpha",
   normalCount: 15,
   khanScale: 1.12,
 
-  field: { width: 8.4, depth: 12.6, thickness: 0.28, wallHeight: 1.5, safeMargin: 0.6 },
+  field: { width: 8.4, depth: 12.6, thickness: 0.28, wallHeight: 2.4, safeMargin: 0.6 },
   camera: { alpha: Math.PI / 2, beta: 0.44, radius: 16.5, targetY: 0, fov: 0.72 },
   piece: {
     width: 0.62, height: 1.18, depth: 0.44,
