@@ -8,6 +8,7 @@ import { PairSelector } from "./pair-selector.js";
 import { InputController } from "./input.js";
 import { flickToTarget } from "./flick.js";
 import { DebugLabels } from "./debug-labels.js";
+import { CollectorSystem } from "./collector.js";
 
 const canvas = document.getElementById("renderCanvas");
 const engine = new BABYLON.Engine(canvas, true, {
@@ -22,16 +23,21 @@ const store = new StateStore();
 const scatter = new ScatterSystem(scene);
 const selector = new PairSelector(scene, store);
 const labels = new DebugLabels(scene);
+const collector = new CollectorSystem(scene);
 
 let stableFrames = 0;
 let settlingStartedAt = 0;
+
+function activePieces() {
+  return scatter.pieces.filter(p => !p.metadata?.collected);
+}
 
 new InputController(
   scene,
   canvas,
   store,
   selector,
-  () => scatter.pieces,
+  () => activePieces(),
   (source, target) => {
     if (!source || !target) return;
 
@@ -43,19 +49,55 @@ new InputController(
       `${source.metadata.id} → ${target.metadata.id}`;
 
     const moved = flickToTarget(scene, source, target, (ok) => {
-      updateAllOrientations(scatter.pieces);
-      labels.refresh(scatter.pieces, store.debug && CONFIG.debug.labels);
-      updatePairCount();
-      store.setState(GameState.READY);
-      document.getElementById("hint").textContent = ok
-        ? "Щелчок выполнен. Выберите следующий чүкө."
-        : "Не удалось запустить щелчок.";
+      if (!ok) {
+        updateAllOrientations(activePieces());
+        labels.refresh(activePieces(), store.debug && CONFIG.debug.labels);
+        updatePairCount();
+        store.setState(GameState.READY);
+        document.getElementById("hint").textContent = "Не удалось запустить щелчок.";
+        return;
+      }
+
+      document.getElementById("hint").textContent =
+        `${target.metadata.id} взят. Переносим в УПАЙ…`;
+
+      const collecting = collector.collect(target, result => {
+        updateAllOrientations(activePieces());
+        labels.refresh(activePieces(), store.debug && CONFIG.debug.labels);
+        selector.clearSelection();
+        selector.updateVisuals(scatter.pieces);
+        updatePairCount();
+        store.setState(GameState.READY);
+
+        if (!result) {
+          document.getElementById("hint").textContent =
+            "Чүкө собран. Выберите следующую пару.";
+          return;
+        }
+
+        if (result.allComplete) {
+          document.getElementById("hint").textContent =
+            "2 УПАЙ! Тестовый цикл сбора завершён.";
+        } else if (result.total === 3) {
+          document.getElementById("hint").textContent =
+            "1 УПАЙ! Теперь собираем второй Упай.";
+        } else {
+          document.getElementById("hint").textContent =
+            `УПАЙ ${result.unit}: ${result.progressInUnit}/3. Выберите следующую пару.`;
+        }
+      });
+
+      if (!collecting) {
+        updateAllOrientations(activePieces());
+        labels.refresh(activePieces(), store.debug && CONFIG.debug.labels);
+        updatePairCount();
+        store.setState(GameState.READY);
+      }
     });
 
     if (!moved) {
       store.setState(GameState.READY);
       document.getElementById("hint").textContent = "Не удалось запустить щелчок.";
-      return;
     }
   }
 );
@@ -63,6 +105,7 @@ new InputController(
 function beginScatter() {
   selector.clearSelection();
   labels.refresh(scatter.pieces, false);
+  collector.reset();
   store.setState(GameState.SCATTERING);
   scatter.scatter();
   stableFrames = 0;
@@ -75,6 +118,7 @@ function reset() {
   selector.clearSelection();
   labels.refresh(scatter.pieces, false);
   scatter.clear();
+  collector.reset();
   document.getElementById("pairCount").textContent = "0";
   document.getElementById("selected").textContent = "—";
   store.setState(GameState.INIT);
@@ -83,9 +127,11 @@ function reset() {
 }
 
 function allStable() {
-  if (!scatter.pieces.length) return false;
-  for (const p of scatter.pieces) {
-    const body = p.metadata.aggregate.body;
+  const pieces = activePieces();
+  if (!pieces.length) return false;
+  for (const p of pieces) {
+    const body = p.metadata?.aggregate?.body;
+    if (!body) continue;
     const lv = body.getLinearVelocity();
     const av = body.getAngularVelocity();
     if (
@@ -97,11 +143,11 @@ function allStable() {
 }
 
 function finalizeLayout() {
-  // IMPORTANT v0.1.2: no automatic reroll at all.
-  updateAllOrientations(scatter.pieces);
-  const check = validateLayout(scatter.pieces);
+  const pieces = activePieces();
+  updateAllOrientations(pieces);
+  const check = validateLayout(pieces);
 
-  labels.refresh(scatter.pieces, store.debug && CONFIG.debug.labels);
+  labels.refresh(pieces, store.debug && CONFIG.debug.labels);
   selector.updateVisuals(scatter.pieces);
   document.getElementById("pairCount").textContent = String(check.pairCount);
   store.setState(GameState.READY);
@@ -112,7 +158,7 @@ function finalizeLayout() {
 }
 
 function updatePairCount() {
-  const check = validateLayout(scatter.pieces);
+  const check = validateLayout(activePieces());
   document.getElementById("pairCount").textContent = String(check.pairCount);
 }
 
@@ -121,8 +167,10 @@ document.getElementById("resetBtn").addEventListener("click", reset);
 document.getElementById("debugBtn").addEventListener("click", () => {
   store.debug = !store.debug;
   document.getElementById("debugBtn").textContent = `DEBUG: ${store.debug ? "ON" : "OFF"}`;
-  labels.refresh(scatter.pieces, store.debug && CONFIG.debug.labels);
+  labels.refresh(activePieces(), store.debug && CONFIG.debug.labels);
 });
+
+collector.reset();
 
 engine.runRenderLoop(() => {
   document.getElementById("fps").textContent = engine.getFps().toFixed(0);
@@ -138,7 +186,7 @@ engine.runRenderLoop(() => {
     }
   }
 
-  if (store.debug) labels.follow(scatter.pieces);
+  if (store.debug) labels.follow(activePieces());
   selector.followRings();
   scene.render();
 });
