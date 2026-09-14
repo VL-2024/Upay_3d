@@ -3,6 +3,7 @@ export class CollectorSystem {
     this.scene = scene;
     this.collected = [];
     this.ensureHud();
+    this.createTrayVisuals();
   }
 
   ensureHud() {
@@ -23,19 +24,43 @@ export class CollectorSystem {
     app.appendChild(board);
   }
 
+  createTrayVisuals() {
+    if (this.scene.getMeshByName("upayTray1")) return;
+
+    const makeTray = (name, x) => {
+      const tray = BABYLON.MeshBuilder.CreateBox(name, {
+        width: 3.25,
+        height: 0.035,
+        depth: 1.30
+      }, this.scene);
+      tray.position.set(x, 0.025, 4.55);
+      tray.isPickable = false;
+      const mat = new BABYLON.StandardMaterial(`${name}Mat`, this.scene);
+      mat.diffuseColor = new BABYLON.Color3(0.08, 0.20, 0.27);
+      mat.emissiveColor = new BABYLON.Color3(0.02, 0.06, 0.08);
+      mat.alpha = 0.72;
+      tray.material = mat;
+      return tray;
+    };
+
+    makeTray("upayTray1", -2.20);
+    makeTray("upayTray2", 2.20);
+  }
+
   reset() {
     this.collected = [];
     this.updateHud();
   }
 
   getSlot(index) {
+    // Two explicit three-piece trays in the reserved lower strip of the field.
     const slots = [
-      new BABYLON.Vector3(-3.00, 0.28, 4.55),
-      new BABYLON.Vector3(-2.25, 0.28, 4.55),
-      new BABYLON.Vector3(-1.50, 0.28, 4.55),
-      new BABYLON.Vector3(1.50, 0.28, 4.55),
-      new BABYLON.Vector3(2.25, 0.28, 4.55),
-      new BABYLON.Vector3(3.00, 0.28, 4.55)
+      new BABYLON.Vector3(-3.00, 0.30, 4.55),
+      new BABYLON.Vector3(-2.20, 0.30, 4.55),
+      new BABYLON.Vector3(-1.40, 0.30, 4.55),
+      new BABYLON.Vector3(1.40, 0.30, 4.55),
+      new BABYLON.Vector3(2.20, 0.30, 4.55),
+      new BABYLON.Vector3(3.00, 0.30, 4.55)
     ];
     return slots[Math.min(index, slots.length - 1)].clone();
   }
@@ -56,6 +81,13 @@ export class CollectorSystem {
     piece.metadata.label?.dispose?.();
     piece.metadata.label = null;
 
+    // Stop the target exactly where it was hit before removing Havok.
+    const body = piece.metadata?.aggregate?.body;
+    try {
+      body?.setLinearVelocity(BABYLON.Vector3.Zero());
+      body?.setAngularVelocity(BABYLON.Vector3.Zero());
+    } catch (_) {}
+
     const start = piece.getAbsolutePosition().clone();
     const end = this.getSlot(index);
     const startQ = piece.rotationQuaternion
@@ -66,13 +98,13 @@ export class CollectorSystem {
     piece.metadata.aggregate?.dispose?.();
     piece.metadata.aggregate = null;
 
-    const duration = 620;
+    const duration = 560;
     const t0 = performance.now();
     const observer = this.scene.onBeforeRenderObservable.add(() => {
       const t = Math.min(1, (performance.now() - t0) / duration);
       const e = 1 - Math.pow(1 - t, 3);
       const p = BABYLON.Vector3.Lerp(start, end, e);
-      p.y += Math.sin(Math.PI * t) * 0.85;
+      p.y += Math.sin(Math.PI * t) * 0.70;
       piece.position.copyFrom(p);
       piece.rotationQuaternion = BABYLON.Quaternion.Slerp(startQ, endQ, e);
 
