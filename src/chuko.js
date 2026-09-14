@@ -1,7 +1,7 @@
 import { CONFIG } from "./config.js";
 import { createChukoVisual } from "./chuko-visual.js";
 
-const COLORS=[[1.00,.20,.18],[.08,.62,.95],[1.00,.76,.08],[.12,.78,.48],[.95,.48,.82],[.96,.96,.92]];
+const COLORS=[[1.00,.28,.25],[.10,.58,.95],[1.00,.78,.10],[.12,.78,.48],[1.00,.48,.78],[.96,.96,.92]];
 
 export function createChuko(scene,index,isKhan=false,spawn=null){
   const scale=isKhan?CONFIG.khanScale:1;
@@ -14,18 +14,18 @@ export function createChuko(scene,index,isKhan=false,spawn=null){
   mesh.rotationQuaternion=spawn?.rotationQuaternion?spawn.rotationQuaternion.clone():BABYLON.Quaternion.Identity();
   mesh.visibility=.001;
 
-  const mat=new BABYLON.PBRMaterial(`mat_${index}_${isKhan}`,scene);
+  const mat=new BABYLON.StandardMaterial(`mat_${index}_${isKhan}`,scene);
   if(isKhan){
-    mat.albedoColor=new BABYLON.Color3(1.00,.66,.08);
-    mat.metallic=.72;
-    mat.roughness=.30;
-    mat.emissiveColor=new BABYLON.Color3(.12,.055,.004);
+    mat.diffuseColor=new BABYLON.Color3(1.00,.67,.08);
+    mat.emissiveColor=new BABYLON.Color3(.18,.08,0);
+    mat.specularColor=new BABYLON.Color3(1.00,.88,.42);
+    mat.specularPower=96;
   }else{
     const c=COLORS[index%COLORS.length];
-    mat.albedoColor=new BABYLON.Color3(...c);
-    mat.metallic=0;
-    mat.roughness=.40;
-    mat.emissiveColor=new BABYLON.Color3(c[0]*.10,c[1]*.10,c[2]*.10);
+    mat.diffuseColor=new BABYLON.Color3(...c);
+    mat.emissiveColor=new BABYLON.Color3(c[0]*.16,c[1]*.16,c[2]*.16);
+    mat.specularColor=new BABYLON.Color3(.35,.35,.35);
+    mat.specularPower=52;
   }
 
   mesh.metadata={id:isKhan?"KHAN":`C${index+1}`,isKhan,state:"UNKNOWN",shell:null,aggregate:null,label:null};
