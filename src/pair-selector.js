@@ -13,14 +13,13 @@ export class PairSelector {
 
   select(source, pieces, allowKhan=false) {
     if (!source || !source.metadata || source.metadata.isKhan || source.metadata.collected) return [];
-
     this.store.selected = source;
     const state = source.metadata.state;
 
     const targets = pieces.filter(p => {
       if (p === source || p.metadata?.collected) return false;
-      if (p.metadata?.isKhan) return allowKhan;
-      return p.metadata?.state === state;
+      if (allowKhan) return !!p.metadata?.isKhan;
+      return !p.metadata?.isKhan && p.metadata?.state === state;
     });
 
     this.store.validTargets = targets;
@@ -48,7 +47,6 @@ export class PairSelector {
     ring.position.copyFrom(piece.position);
     ring.position.y = Math.max(0.10, piece.position.y + 0.03);
     ring.isPickable = false;
-
     const mat = new BABYLON.StandardMaterial(`ringMat_${piece.metadata.id}`, this.scene);
     mat.emissiveColor = color;
     mat.diffuseColor = color;
