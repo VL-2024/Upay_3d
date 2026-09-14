@@ -29,11 +29,11 @@ export class CollectorSystem {
 
     const makeTray = (name, x) => {
       const tray = BABYLON.MeshBuilder.CreateBox(name, {
-        width: 3.25,
+        width: 2.85,
         height: 0.035,
-        depth: 1.30
+        depth: 1.10
       }, this.scene);
-      tray.position.set(x, 0.025, 4.55);
+      tray.position.set(x, 0.025, 3.75);
       tray.isPickable = false;
       const mat = new BABYLON.StandardMaterial(`${name}Mat`, this.scene);
       mat.diffuseColor = new BABYLON.Color3(0.08, 0.20, 0.27);
@@ -43,8 +43,8 @@ export class CollectorSystem {
       return tray;
     };
 
-    makeTray("upayTray1", -2.20);
-    makeTray("upayTray2", 2.20);
+    makeTray("upayTray1", -1.85);
+    makeTray("upayTray2", 1.85);
   }
 
   reset() {
@@ -53,16 +53,25 @@ export class CollectorSystem {
   }
 
   getSlot(index) {
-    // Two explicit three-piece trays in the reserved lower strip of the field.
+    // Keep all collected pieces well inside the visible field. The old first
+    // slot (-3.0, 4.55) sat too close to the lower-left perspective edge.
     const slots = [
-      new BABYLON.Vector3(-3.00, 0.30, 4.55),
-      new BABYLON.Vector3(-2.20, 0.30, 4.55),
-      new BABYLON.Vector3(-1.40, 0.30, 4.55),
-      new BABYLON.Vector3(1.40, 0.30, 4.55),
-      new BABYLON.Vector3(2.20, 0.30, 4.55),
-      new BABYLON.Vector3(3.00, 0.30, 4.55)
+      new BABYLON.Vector3(-2.55, 0.30, 3.75),
+      new BABYLON.Vector3(-1.85, 0.30, 3.75),
+      new BABYLON.Vector3(-1.15, 0.30, 3.75),
+      new BABYLON.Vector3(1.15, 0.30, 3.75),
+      new BABYLON.Vector3(1.85, 0.30, 3.75),
+      new BABYLON.Vector3(2.55, 0.30, 3.75)
     ];
     return slots[Math.min(index, slots.length - 1)].clone();
+  }
+
+  clampToVisibleField(p) {
+    // Deliberately stricter than the physical field bounds to account for
+    // perspective and the piece's own dimensions.
+    p.x = Math.max(-2.85, Math.min(2.85, p.x));
+    p.z = Math.max(-4.65, Math.min(4.05, p.z));
+    return p;
   }
 
   collect(piece, onDone) {
@@ -81,30 +90,34 @@ export class CollectorSystem {
     piece.metadata.label?.dispose?.();
     piece.metadata.label = null;
 
-    // Stop the target exactly where it was hit before removing Havok.
     const body = piece.metadata?.aggregate?.body;
     try {
       body?.setLinearVelocity(BABYLON.Vector3.Zero());
       body?.setAngularVelocity(BABYLON.Vector3.Zero());
+      body?.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
     } catch (_) {}
 
-    const start = piece.getAbsolutePosition().clone();
+    const start = this.clampToVisibleField(piece.getAbsolutePosition().clone());
     const end = this.getSlot(index);
     const startQ = piece.rotationQuaternion
       ? piece.rotationQuaternion.clone()
       : BABYLON.Quaternion.FromEulerAngles(piece.rotation.x, piece.rotation.y, piece.rotation.z);
     const endQ = BABYLON.Quaternion.FromEulerAngles(0, 0, Math.PI / 2);
 
+    // Remove Havok before the collection flight. From this point the target is
+    // purely visual and cannot receive any collision impulse.
     piece.metadata.aggregate?.dispose?.();
     piece.metadata.aggregate = null;
+    piece.position.copyFrom(start);
 
-    const duration = 560;
+    const duration = 520;
     const t0 = performance.now();
     const observer = this.scene.onBeforeRenderObservable.add(() => {
       const t = Math.min(1, (performance.now() - t0) / duration);
       const e = 1 - Math.pow(1 - t, 3);
       const p = BABYLON.Vector3.Lerp(start, end, e);
-      p.y += Math.sin(Math.PI * t) * 0.70;
+      p.y += Math.sin(Math.PI * t) * 0.58;
+      this.clampToVisibleField(p);
       piece.position.copyFrom(p);
       piece.rotationQuaternion = BABYLON.Quaternion.Slerp(startQ, endQ, e);
 
