@@ -42,21 +42,21 @@ new InputController(
     document.getElementById("hint").textContent =
       `${source.metadata.id} → ${target.metadata.id}`;
 
-    const moved = flickToTarget(source, target);
+    const moved = flickToTarget(scene, source, target, (ok) => {
+      updateAllOrientations(scatter.pieces);
+      labels.refresh(scatter.pieces, store.debug && CONFIG.debug.labels);
+      updatePairCount();
+      store.setState(GameState.READY);
+      document.getElementById("hint").textContent = ok
+        ? "Щелчок выполнен. Выберите следующий чүкө."
+        : "Не удалось запустить щелчок.";
+    });
+
     if (!moved) {
       store.setState(GameState.READY);
       document.getElementById("hint").textContent = "Не удалось запустить щелчок.";
       return;
     }
-
-    window.setTimeout(() => {
-      updateAllOrientations(scatter.pieces);
-      labels.refresh(scatter.pieces, store.debug && CONFIG.debug.labels);
-      updatePairCount();
-      store.setState(GameState.READY);
-      document.getElementById("hint").textContent =
-        "Щелчок выполнен. Выберите следующий чүкө.";
-    }, CONFIG.flick.settleDelayMs);
   }
 );
 
@@ -139,6 +139,7 @@ engine.runRenderLoop(() => {
   }
 
   if (store.debug) labels.follow(scatter.pieces);
+  selector.followRings();
   scene.render();
 });
 

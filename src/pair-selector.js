@@ -2,26 +2,21 @@ export class PairSelector {
   constructor(scene, stateStore) {
     this.scene = scene;
     this.store = stateStore;
-    this.hl = new BABYLON.HighlightLayer("pairHighlight", scene, {
-      blurHorizontalSize: 1.4,
-      blurVerticalSize: 1.4
-    });
-    this.selectedColor = new BABYLON.Color3(1.0, 0.72, 0.05);
-    this.targetColor = new BABYLON.Color3(0.05, 1.0, 0.30);
+    this.rings = new Map();
   }
 
   clearSelection() {
     this.store.selected = null;
     this.store.validTargets = [];
     document.getElementById("selected").textContent = "—";
-    this.hl.removeAllMeshes();
   }
 
-  select(source, pieces, allowKhan = false) {
+  select(source, pieces, allowKhan=false) {
     if (!source || !source.metadata || source.metadata.isKhan) return [];
 
     this.store.selected = source;
     const state = source.metadata.state;
+
     const targets = pieces.filter(p =>
       p !== source &&
       p.metadata?.state === state &&
@@ -29,7 +24,9 @@ export class PairSelector {
     );
 
     this.store.validTargets = targets;
-    document.getElementById("selected").textContent = `${source.metadata.id} / ${source.metadata.state}`;
+    document.getElementById("selected").textContent =
+      `${source.metadata.id} / ${source.metadata.state}`;
+
     this.updateVisuals(pieces);
     return targets;
   }
@@ -38,25 +35,61 @@ export class PairSelector {
     return this.store.validTargets.includes(mesh);
   }
 
+  clearRings() {
+    for (const r of this.rings.values()) r.dispose();
+    this.rings.clear();
+  }
+
+  makeRing(piece, color) {
+    const ring = BABYLON.MeshBuilder.CreateTorus(
+      `ring_${piece.metadata.id}_${Math.random()}`,
+      { diameter: 1.15, thickness: 0.075, tessellation: 32 },
+      this.scene
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.copyFrom(piece.position);
+    ring.position.y = Math.max(0.10, piece.position.y + 0.03);
+    ring.isPickable = false;
+
+    const mat = new BABYLON.StandardMaterial(`ringMat_${piece.metadata.id}`, this.scene);
+    mat.emissiveColor = color;
+    mat.diffuseColor = color;
+    mat.disableLighting = true;
+    mat.alpha = 0.95;
+    ring.material = mat;
+
+    this.rings.set(piece, ring);
+  }
+
   updateVisuals(pieces) {
-    this.hl.removeAllMeshes();
+    this.clearRings();
 
     for (const p of pieces) {
       const shell = p.metadata?.shell;
       if (!shell?.material) continue;
 
-      shell.material.emissiveColor = new BABYLON.Color3(0, 0, 0);
-      shell.scaling.setAll(1);
+      // Return to almost neutral emissive.
+      shell.material.emissiveColor = p.metadata.isKhan
+        ? new BABYLON.Color3(0.06, 0.035, 0.0)
+        : new BABYLON.Color3(0, 0, 0);
 
       if (p === this.store.selected) {
-        shell.material.emissiveColor = new BABYLON.Color3(0.22, 0.13, 0.01);
-        this.hl.addMesh(shell, this.selectedColor);
-        shell.scaling.setAll(1.08);
+        // Selected = bright gold.
+        shell.material.emissiveColor = new BABYLON.Color3(0.55, 0.34, 0.02);
+        this.makeRing(p, new BABYLON.Color3(1.0, 0.72, 0.08));
       } else if (this.store.validTargets.includes(p)) {
-        shell.material.emissiveColor = new BABYLON.Color3(0.02, 0.28, 0.04);
-        this.hl.addMesh(shell, this.targetColor);
-        shell.scaling.setAll(1.12);
+        // Valid target = unmistakable neon green.
+        shell.material.emissiveColor = new BABYLON.Color3(0.10, 0.72, 0.08);
+        this.makeRing(p, new BABYLON.Color3(0.15, 1.0, 0.18));
       }
+    }
+  }
+
+  followRings() {
+    for (const [piece, ring] of this.rings.entries()) {
+      ring.position.x = piece.position.x;
+      ring.position.z = piece.position.z;
+      ring.position.y = Math.max(0.10, piece.position.y + 0.03);
     }
   }
 }

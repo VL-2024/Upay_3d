@@ -58,7 +58,7 @@ export class InputController {
     const pick = this.scene.pick(
       this.scene.pointerX,
       this.scene.pointerY,
-      mesh => !!mesh?.metadata?.id
+      mesh => !!mesh?.metadata?.id || !!mesh?.metadata?.physicsMesh
     );
     if (!pick?.hit || !pick.pickedMesh) return null;
     return pick.pickedMesh.metadata?.physicsMesh || pick.pickedMesh;
