@@ -30,7 +30,9 @@ function activePieces(){ return scatter.pieces.filter(p=>!p.metadata?.collected)
 function khanPiece(){ return scatter.pieces.find(p=>p.metadata?.isKhan)||null; }
 
 function clampActivePiecesToField(){
-  const maxX = CONFIG.field.width/2 - 0.78;
+  // Portrait camera is narrower than the physical rug at the far edges.
+  // Use a stricter horizontal safe zone so the whole chuko body stays on-screen.
+  const maxX = 2.55;
   const maxZ = CONFIG.field.depth/2 - 1.05;
   for(const p of activePieces()){
     const x = Math.max(-maxX, Math.min(maxX, p.position.x));
