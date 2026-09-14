@@ -1,11 +1,12 @@
 import { CONFIG } from "./config.js";
 
 /**
- * Deterministic technical flick for v0.1.9.
- * Source and target are kept under controlled ANIMATED motion through contact.
- * After contact the target is collected, while the source REMAINS animated
- * at rest instead of being returned to DYNAMIC. This removes the Havok
- * launch edge case that was still occurring on the first move.
+ * Deterministic technical flick.
+ * Phase 1: source travels to the selected target.
+ * Phase 2: after contact the striking chuko visibly settles into a slightly
+ * different place and orientation. This makes the next legal pairs changing
+ * on screen understandable to the player, while the ticket result remains
+ * scenario-controlled.
  */
 export function flickToTarget(scene, source, target, onDone) {
   const body = source?.metadata?.aggregate?.body;
@@ -32,21 +33,38 @@ export function flickToTarget(scene, source, target, onDone) {
   const direction = flat.normalize();
   const contactGap = 0.18;
   const travel = Math.max(0.10, distance - contactGap);
-  const rawEnd = start.add(direction.scale(travel));
+  const rawContact = start.add(direction.scale(travel));
 
-  // Hard clamp inside the visible play field. Even if target is close to an edge,
-  // the source center can never be animated outside the safe playable area.
-  const halfW = CONFIG.field.width / 2 - Math.max(CONFIG.field.safeMargin, 0.65);
-  const halfD = CONFIG.field.depth / 2 - Math.max(CONFIG.field.safeMargin, 0.85);
-  const animatedEnd = new BABYLON.Vector3(
-    clamp(rawEnd.x, -halfW, halfW),
+  // Match the approved portrait safe zone from main.js.
+  const halfW = 2.55;
+  const halfD = CONFIG.field.depth / 2 - 1.05;
+  const contactPos = new BABYLON.Vector3(
+    clamp(rawContact.x, -halfW, halfW),
     Math.max(start.y, 0.24),
-    clamp(rawEnd.z, -halfD, halfD)
+    clamp(rawContact.z, -halfD, halfD)
   );
 
   const startQ = source.rotationQuaternion
     ? source.rotationQuaternion.clone()
     : BABYLON.Quaternion.FromEulerAngles(source.rotation.x, source.rotation.y, source.rotation.z);
+
+  // Small deterministic post-contact displacement and roll.
+  // Sign alternates by id so repeated hits do not all look identical.
+  const sign = idSign(source.metadata?.id);
+  const side = new BABYLON.Vector3(-direction.z, 0, direction.x);
+  const rawSettle = contactPos
+    .add(direction.scale(0.10))
+    .add(side.scale(0.09 * sign));
+  const settlePos = new BABYLON.Vector3(
+    clamp(rawSettle.x, -halfW, halfW),
+    contactPos.y,
+    clamp(rawSettle.z, -halfD, halfD)
+  );
+
+  const rollAxis = side.normalize();
+  const settleRoll = BABYLON.Quaternion.RotationAxis(rollAxis, 1.18 * sign);
+  const settleYaw = BABYLON.Quaternion.RotationAxis(BABYLON.Axis.Y, 0.20 * sign);
+  const settleQ = settleYaw.multiply(settleRoll).multiply(startQ);
 
   targetBody.setLinearVelocity(BABYLON.Vector3.Zero());
   targetBody.setAngularVelocity(BABYLON.Vector3.Zero());
@@ -57,38 +75,54 @@ export function flickToTarget(scene, source, target, onDone) {
   body.setAngularVelocity(BABYLON.Vector3.Zero());
   body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
 
-  const duration = Math.max(260, Math.min(620, 210 + distance * 60));
+  const travelDuration = Math.max(260, Math.min(620, 210 + distance * 60));
+  const settleDuration = 270;
   const t0 = performance.now();
+  let contactQ = startQ;
 
   const observer = scene.onBeforeRenderObservable.add(() => {
-    const t = Math.min(1, (performance.now() - t0) / duration);
-    const e = t * t * (3 - 2 * t);
-    const pos = BABYLON.Vector3.Lerp(start, animatedEnd, e);
+    const elapsed = performance.now() - t0;
 
-    const spin = BABYLON.Quaternion.RotationAxis(
-      new BABYLON.Vector3(-direction.z, 0, direction.x),
-      e * Math.min(1.6, distance * 0.35)
-    );
-    const q = spin.multiply(startQ);
+    if (elapsed <= travelDuration) {
+      const t = Math.min(1, elapsed / travelDuration);
+      const e = t * t * (3 - 2 * t);
+      const pos = BABYLON.Vector3.Lerp(start, contactPos, e);
+      const spin = BABYLON.Quaternion.RotationAxis(
+        new BABYLON.Vector3(-direction.z, 0, direction.x),
+        e * Math.min(1.6, distance * 0.35)
+      );
+      contactQ = spin.multiply(startQ);
+      body.setTargetTransform(pos, contactQ);
+      targetBody.setTargetTransform(targetPos, targetQ);
+      return;
+    }
 
+    const st = Math.min(1, (elapsed - travelDuration) / settleDuration);
+    const se = 1 - Math.pow(1 - st, 3);
+    const settleArc = Math.sin(Math.PI * st) * 0.08;
+    const pos = BABYLON.Vector3.Lerp(contactPos, settlePos, se);
+    pos.y += settleArc;
+    const q = BABYLON.Quaternion.Slerp(contactQ, settleQ, se);
     body.setTargetTransform(pos, q);
     targetBody.setTargetTransform(targetPos, targetQ);
 
-    if (t >= 1) {
+    if (st >= 1) {
       scene.onBeforeRenderObservable.remove(observer);
-
-      // Keep source fully controlled and stationary after contact.
-      // Do NOT switch it back to DYNAMIC here: that transition was the
-      // remaining cause of the first-piece launch on some Havok frames.
       body.setLinearVelocity(BABYLON.Vector3.Zero());
       body.setAngularVelocity(BABYLON.Vector3.Zero());
-      body.setTargetTransform(animatedEnd, q);
-
+      body.setTargetTransform(settlePos, settleQ);
       onDone?.(true);
     }
   });
 
   return true;
+}
+
+function idSign(id) {
+  const s = String(id || "1");
+  let n = 0;
+  for (let i = 0; i < s.length; i++) n += s.charCodeAt(i);
+  return n % 2 === 0 ? 1 : -1;
 }
 
 function clamp(v, min, max) {
