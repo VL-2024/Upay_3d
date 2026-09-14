@@ -12,13 +12,14 @@ export class PairSelector {
   }
 
   select(source, pieces, allowKhan=false) {
-    if (!source || !source.metadata || source.metadata.isKhan) return [];
+    if (!source || !source.metadata || source.metadata.isKhan || source.metadata.collected) return [];
 
     this.store.selected = source;
     const state = source.metadata.state;
 
     const targets = pieces.filter(p =>
       p !== source &&
+      !p.metadata?.collected &&
       p.metadata?.state === state &&
       (allowKhan || !p.metadata?.isKhan)
     );
@@ -32,7 +33,7 @@ export class PairSelector {
   }
 
   isValidTarget(mesh) {
-    return this.store.validTargets.includes(mesh);
+    return !!mesh && !mesh.metadata?.collected && this.store.validTargets.includes(mesh);
   }
 
   clearRings() {
@@ -68,17 +69,16 @@ export class PairSelector {
       const shell = p.metadata?.shell;
       if (!shell?.material) continue;
 
-      // Return to almost neutral emissive.
       shell.material.emissiveColor = p.metadata.isKhan
         ? new BABYLON.Color3(0.06, 0.035, 0.0)
         : new BABYLON.Color3(0, 0, 0);
 
+      if (p.metadata?.collected) continue;
+
       if (p === this.store.selected) {
-        // Selected = bright gold.
         shell.material.emissiveColor = new BABYLON.Color3(0.55, 0.34, 0.02);
         this.makeRing(p, new BABYLON.Color3(1.0, 0.72, 0.08));
       } else if (this.store.validTargets.includes(p)) {
-        // Valid target = unmistakable neon green.
         shell.material.emissiveColor = new BABYLON.Color3(0.10, 0.72, 0.08);
         this.makeRing(p, new BABYLON.Color3(0.15, 1.0, 0.18));
       }
@@ -87,6 +87,10 @@ export class PairSelector {
 
   followRings() {
     for (const [piece, ring] of this.rings.entries()) {
+      if (piece.metadata?.collected) {
+        ring.setEnabled(false);
+        continue;
+      }
       ring.position.x = piece.position.x;
       ring.position.z = piece.position.z;
       ring.position.y = Math.max(0.10, piece.position.y + 0.03);
