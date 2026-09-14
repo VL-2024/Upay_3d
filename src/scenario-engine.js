@@ -1,0 +1,1 @@
+export const SCENARIOS=Object.freeze({ZERO:"ZERO",ONE:"ONE",KHAN:"KHAN"});export class ScenarioEngine{constructor(){this.current=SCENARIOS.ONE;this.step=0}setScenario(code){if(!SCENARIOS[code])throw new Error(`Unknown scenario: ${code}`);this.current=code;this.step=0}nextStep(){this.step+=1;return{scenario:this.current,step:this.step}}}

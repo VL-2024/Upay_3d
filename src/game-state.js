@@ -1,0 +1,1 @@
+export const GameState=Object.freeze({INIT:"INIT",SCATTERING:"SCATTERING",SETTLING:"SETTLING",READY:"READY",FLICKING:"FLICKING",RESULT:"RESULT"});export class StateStore{constructor(){this.state=GameState.INIT;this.selected=null;this.validTargets=[];this.debug=true}setState(next){this.state=next;document.getElementById("gameState").textContent=next}}
