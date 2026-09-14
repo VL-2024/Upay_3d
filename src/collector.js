@@ -2,6 +2,25 @@ export class CollectorSystem {
   constructor(scene) {
     this.scene = scene;
     this.collected = [];
+    this.ensureHud();
+  }
+
+  ensureHud() {
+    if (document.getElementById("upayBoard")) return;
+    const app = document.getElementById("app") || document.body;
+    const board = document.createElement("div");
+    board.id = "upayBoard";
+    board.style.cssText = "position:absolute;right:10px;top:58px;z-index:12;display:flex;flex-direction:column;gap:7px;pointer-events:none";
+    board.innerHTML = `
+      <div id="upay1" style="min-width:104px;padding:8px 10px;border-radius:12px;background:rgba(6,18,31,.72);border:1px solid rgba(255,255,255,.18);color:#fff;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.18)">
+        <div style="font-size:10px;letter-spacing:.12em;opacity:.8">УПАЙ 1</div>
+        <div id="upay1Count" style="font-size:15px;font-weight:900;margin-top:2px">0/3</div>
+      </div>
+      <div id="upay2" style="min-width:104px;padding:8px 10px;border-radius:12px;background:rgba(6,18,31,.72);border:1px solid rgba(255,255,255,.18);color:#fff;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.18)">
+        <div style="font-size:10px;letter-spacing:.12em;opacity:.8">УПАЙ 2</div>
+        <div id="upay2Count" style="font-size:15px;font-weight:900;margin-top:2px">0/3</div>
+      </div>`;
+    app.appendChild(board);
   }
 
   reset() {
@@ -9,12 +28,7 @@ export class CollectorSystem {
     this.updateHud();
   }
 
-  get activeCount() {
-    return this.collected.length;
-  }
-
   getSlot(index) {
-    // Two three-piece racks near the lower edge of the field.
     const slots = [
       new BABYLON.Vector3(-3.00, 0.28, 4.55),
       new BABYLON.Vector3(-2.25, 0.28, 4.55),
@@ -49,8 +63,6 @@ export class CollectorSystem {
       : BABYLON.Quaternion.FromEulerAngles(piece.rotation.x, piece.rotation.y, piece.rotation.z);
     const endQ = BABYLON.Quaternion.FromEulerAngles(0, 0, Math.PI / 2);
 
-    // Remove the collected piece from Havok. From this point it is a display piece,
-    // so it cannot interfere with the next legal flick.
     piece.metadata.aggregate?.dispose?.();
     piece.metadata.aggregate = null;
 
@@ -73,11 +85,10 @@ export class CollectorSystem {
 
         const total = this.collected.length;
         const unit = total <= 3 ? 1 : 2;
-        const unitComplete = total === 3 || total === 6;
         onDone?.({
           total,
           unit,
-          unitComplete,
+          unitComplete: total === 3 || total === 6,
           allComplete: total === 6,
           progressInUnit: total <= 3 ? total : total - 3
         });
@@ -88,6 +99,7 @@ export class CollectorSystem {
   }
 
   updateHud() {
+    this.ensureHud();
     const total = this.collected.length;
     const one = Math.min(total, 3);
     const two = Math.max(0, Math.min(total - 3, 3));
@@ -98,7 +110,14 @@ export class CollectorSystem {
 
     if (upay1) upay1.textContent = one >= 3 ? "1 УПАЙ" : `${one}/3`;
     if (upay2) upay2.textContent = two >= 3 ? "2 УПАЙ" : `${two}/3`;
-    tray1?.classList.toggle("complete", one >= 3);
-    tray2?.classList.toggle("complete", two >= 3);
+
+    if (tray1) {
+      tray1.style.borderColor = one >= 3 ? "#e7c36a" : "rgba(255,255,255,.18)";
+      tray1.style.boxShadow = one >= 3 ? "0 0 18px rgba(231,195,106,.42)" : "0 6px 18px rgba(0,0,0,.18)";
+    }
+    if (tray2) {
+      tray2.style.borderColor = two >= 3 ? "#e7c36a" : "rgba(255,255,255,.18)";
+      tray2.style.boxShadow = two >= 3 ? "0 0 18px rgba(231,195,106,.42)" : "0 6px 18px rgba(0,0,0,.18)";
+    }
   }
 }
