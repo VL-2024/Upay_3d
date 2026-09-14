@@ -1,5 +1,5 @@
 export const CONFIG = {
-  version: "0.1.18-alpha",
+  version: "0.1.19-alpha",
   normalCount: 15,
   khanScale: 1.12,
 
@@ -21,18 +21,7 @@ export const CONFIG = {
     sleepAngularThreshold: 0.12,
     stableFramesRequired: 24
   },
-  layout: {
-    minDistance: 0.58,
-    maxOverlapsAllowed: 2,
-    requiredPairCount: 1,
-    maxRerolls: 0
-  },
-  flick: {
-    minSpeed: 2.2,
-    maxSpeed: 5.8,
-    speedPerUnit: 0.82,
-    upwardSpeed: 0.05,
-    settleDelayMs: 1250
-  },
+  layout: { minDistance: 0.58, maxOverlapsAllowed: 2, requiredPairCount: 1, maxRerolls: 0 },
+  flick: { minSpeed: 2.2, maxSpeed: 5.8, speedPerUnit: 0.82, upwardSpeed: 0.05, settleDelayMs: 1250 },
   debug: { labels: true, showPairLines: false }
 };
