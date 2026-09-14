@@ -24,6 +24,8 @@ const scatter = new ScatterSystem(scene);
 const selector = new PairSelector(scene, store);
 const labels = new DebugLabels(scene);
 const collector = new CollectorSystem(scene);
+const statusEl = document.querySelector(".status");
+if (statusEl) statusEl.textContent = `v${CONFIG.version} • Babylon.js + Havok`;
 
 let stableFrames = 0;
 let settlingStartedAt = 0;
