@@ -38,11 +38,12 @@ export class ScatterSystem {
   }
 
   buildCells(total) {
-    // 4 columns x 4 rows cover the useful play area. Shuffle the cells each
-    // round so the board stays natural while remaining genuinely two-dimensional.
+    // Keep all spawn cells comfortably inside the visible rug. The old outer
+    // columns were too close to the physical walls, so rotating pieces could
+    // settle half outside the field.
     const cells = [];
-    const xs = [-2.75, -0.92, 0.92, 2.75];
-    const zs = [-3.65, -1.55, 0.55, 2.65];
+    const xs = [-2.35, -0.78, 0.78, 2.35];
+    const zs = [-3.25, -1.35, 0.55, 2.30];
     for (const z of zs) for (const x of xs) cells.push({ x, z });
 
     for (let i = cells.length - 1; i > 0; i--) {
@@ -55,9 +56,9 @@ export class ScatterSystem {
   makeSpawn(cell, i) {
     return {
       position: new BABYLON.Vector3(
-        cell.x + rand(-0.34, 0.34),
+        cell.x + rand(-0.22, 0.22),
         rand(CONFIG.piece.spawnHeightMin, CONFIG.piece.spawnHeightMax) + i * 0.018,
-        cell.z + rand(-0.38, 0.38)
+        cell.z + rand(-0.26, 0.26)
       ),
       rotationQuaternion: BABYLON.Quaternion.RotationYawPitchRoll(
         Math.random() * Math.PI * 2,
@@ -70,7 +71,7 @@ export class ScatterSystem {
   applyScatterImpulse(mesh) {
     const body = mesh.metadata.aggregate.body;
     body.applyImpulse(
-      new BABYLON.Vector3(rand(-0.16, 0.16), 0, rand(-0.16, 0.16)),
+      new BABYLON.Vector3(rand(-0.07, 0.07), 0, rand(-0.07, 0.07)),
       mesh.getAbsolutePosition()
     );
   }
