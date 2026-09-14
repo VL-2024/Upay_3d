@@ -13,15 +13,15 @@ export class CollectorSystem {
     const app = document.getElementById("app") || document.body;
     const board = document.createElement("div");
     board.id = "upayBoard";
-    board.style.cssText = "position:absolute;right:10px;top:58px;z-index:12;display:flex;flex-direction:column;gap:7px;pointer-events:none";
+    board.style.cssText = "position:absolute;right:10px;top:68px;z-index:12;display:flex;flex-direction:column;gap:8px;pointer-events:none";
     board.innerHTML = `
-      <div id="upay1" style="min-width:104px;padding:8px 10px;border-radius:12px;background:rgba(6,18,31,.72);border:1px solid rgba(255,255,255,.18);color:#fff;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.18);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease">
-        <div style="font-size:10px;letter-spacing:.12em;opacity:.8">УПАЙ 1</div>
-        <div id="upay1Count" style="font-size:15px;font-weight:900;margin-top:2px">0/3</div>
+      <div id="upay1" style="min-width:118px;padding:10px 12px;border-radius:13px;background:rgba(6,18,31,.72);border:1px solid rgba(255,255,255,.18);color:#fff;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.18);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease">
+        <div style="font-size:13px;font-weight:800;letter-spacing:.12em;opacity:.85">УПАЙ 1</div>
+        <div id="upay1Count" style="font-size:20px;font-weight:900;margin-top:3px">0/3</div>
       </div>
-      <div id="upay2" style="min-width:104px;padding:8px 10px;border-radius:12px;background:rgba(6,18,31,.72);border:1px solid rgba(255,255,255,.18);color:#fff;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.18);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease">
-        <div style="font-size:10px;letter-spacing:.12em;opacity:.8">УПАЙ 2</div>
-        <div id="upay2Count" style="font-size:15px;font-weight:900;margin-top:2px">0/3</div>
+      <div id="upay2" style="min-width:118px;padding:10px 12px;border-radius:13px;background:rgba(6,18,31,.72);border:1px solid rgba(255,255,255,.18);color:#fff;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.18);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease">
+        <div style="font-size:13px;font-weight:800;letter-spacing:.12em;opacity:.85">УПАЙ 2</div>
+        <div id="upay2Count" style="font-size:20px;font-weight:900;margin-top:3px">0/3</div>
       </div>`;
     app.appendChild(board);
   }
@@ -50,7 +50,6 @@ export class CollectorSystem {
     makeTray("upayTray1", -1.85);
     makeTray("upayTray2", 1.85);
 
-    // Six subtle markers make it visually clear that each UPAI is exactly 3 chuko.
     for (let i = 0; i < 6; i++) {
       const p = this.getSlot(i);
       const marker = BABYLON.MeshBuilder.CreateCylinder(`upaySlot${i + 1}`, {
@@ -72,9 +71,7 @@ export class CollectorSystem {
   reset() {
     this.collected = [];
     for (const marker of this.slotMarkers) marker.setEnabled(true);
-    for (const mat of this.trayMaterials) {
-      mat.emissiveColor.copyFromFloats(0.02, 0.06, 0.08);
-    }
+    for (const mat of this.trayMaterials) mat.emissiveColor.copyFromFloats(0.02, 0.06, 0.08);
     this.updateHud();
   }
 
