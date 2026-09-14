@@ -11,16 +11,274 @@ import { DebugLabels } from "./debug-labels.js";
 import { CollectorSystem } from "./collector.js";
 import { ScenarioEngine } from "./scenario-engine.js";
 
-const canvas=document.getElementById("renderCanvas");const engine=new BABYLON.Engine(canvas,true,{preserveDrawingBuffer:true,stencil:true,adaptToDeviceRatio:true});const havokInstance=await HavokPhysics();const{scene}=createScene(engine,canvas,havokInstance);const store=new StateStore();const scatter=new ScatterSystem(scene);const selector=new PairSelector(scene,store);const labels=new DebugLabels(scene);const collector=new CollectorSystem(scene);const scenario=new ScenarioEngine();const statusEl=document.querySelector(".status");if(statusEl)statusEl.textContent=`v${CONFIG.version} • Babylon.js + Havok`;let stableFrames=0,settlingStartedAt=0,hasStartedDemo=false;
-function activePieces(){return scatter.pieces.filter(p=>!p.metadata?.collected)}
-function freezeActivePieces(){for(const p of activePieces()){const body=p.metadata?.aggregate?.body;if(!body)continue;try{const pos=p.getAbsolutePosition().clone();const q=p.rotationQuaternion?p.rotationQuaternion.clone():BABYLON.Quaternion.FromEulerAngles(p.rotation.x,p.rotation.y,p.rotation.z);p.metadata.lockedPosition=pos.clone();p.metadata.lockedQuaternion=q.clone();body.setLinearVelocity(BABYLON.Vector3.Zero());body.setAngularVelocity(BABYLON.Vector3.Zero());body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);body.setTargetTransform(pos,q)}catch(_){}}}
-function pinActivePieces(){for(const p of activePieces()){const body=p.metadata?.aggregate?.body,pos=p.metadata?.lockedPosition,q=p.metadata?.lockedQuaternion;if(!body||!pos||!q)continue;try{body.setLinearVelocity(BABYLON.Vector3.Zero());body.setAngularVelocity(BABYLON.Vector3.Zero());body.setTargetTransform(pos,q)}catch(_){}}}
-function showScenario(){const s=scenario.snapshot();document.getElementById("hint").textContent=`DEMO ${s.scenario} • цель: ${s.limit} чүкө. Выберите подходящую пару.`}
-function finishScenario(){freezeActivePieces();selector.clearSelection();selector.updateVisuals(scatter.pieces);store.setState(GameState.RESULT);document.getElementById("hint").textContent=`${scenario.resultText()} • Нажмите «РАССЫПАТЬ» для следующего сценария.`}
-new InputController(scene,canvas,store,selector,()=>activePieces(),(source,target)=>{if(!source||!target||!scenario.canCollect())return;if(source.metadata){source.metadata.lockedPosition=null;source.metadata.lockedQuaternion=null}selector.clearSelection();selector.updateVisuals(scatter.pieces);labels.refresh(scatter.pieces,false);store.setState(GameState.FLICKING);document.getElementById("hint").textContent=`${source.metadata.id} → ${target.metadata.id}`;const moved=flickToTarget(scene,source,target,(ok)=>{if(!ok){freezeActivePieces();updateAllOrientations(activePieces());labels.refresh(activePieces(),store.debug&&CONFIG.debug.labels);updatePairCount();store.setState(GameState.READY);showScenario();return}freezeActivePieces();document.getElementById("hint").textContent=`${target.metadata.id} взят. Переносим в УПАЙ…`;const collecting=collector.collect(target,result=>{const state=scenario.registerCollection();freezeActivePieces();updateAllOrientations(activePieces());labels.refresh(activePieces(),store.debug&&CONFIG.debug.labels);selector.clearSelection();selector.updateVisuals(scatter.pieces);updatePairCount();if(state.finished){finishScenario();return}store.setState(GameState.READY);const progress=result?.total??state.collected;document.getElementById("hint").textContent=`DEMO ${state.scenario} • собрано ${progress}/${state.limit}. Выберите следующую пару.`});if(!collecting){freezeActivePieces();store.setState(GameState.READY);showScenario()}});if(!moved){freezeActivePieces();store.setState(GameState.READY);showScenario()}});
-function beginScatter(){selector.clearSelection();labels.refresh(scatter.pieces,false);collector.reset();scenario.reset({advanceDemo:hasStartedDemo});hasStartedDemo=true;for(const p of scatter.pieces){if(p.metadata){p.metadata.lockedPosition=null;p.metadata.lockedQuaternion=null}}store.setState(GameState.SCATTERING);scatter.scatter();stableFrames=0;settlingStartedAt=performance.now();store.setState(GameState.SETTLING);document.getElementById("hint").textContent=`Чүкө рассыпаются… DEMO ${scenario.snapshot().scenario}`}
-function reset(){selector.clearSelection();labels.refresh(scatter.pieces,false);scatter.clear();collector.reset();scenario.reset();hasStartedDemo=false;document.getElementById("pairCount").textContent="0";document.getElementById("selected").textContent="—";store.setState(GameState.INIT);document.getElementById("hint").textContent="Нажмите «РАССЫПАТЬ». Демо-сценарии: ZERO_B → ZERO_A → ONE → TWO."}
-function allStable(){const pieces=activePieces();if(!pieces.length)return false;for(const p of pieces){const body=p.metadata?.aggregate?.body;if(!body)continue;const lv=body.getLinearVelocity(),av=body.getAngularVelocity();if(lv.length()>CONFIG.physics.sleepLinearThreshold||av.length()>CONFIG.physics.sleepAngularThreshold)return false}return true}
-function finalizeLayout(){const pieces=activePieces();updateAllOrientations(pieces);const check=validateLayout(pieces);freezeActivePieces();labels.refresh(pieces,store.debug&&CONFIG.debug.labels);selector.updateVisuals(scatter.pieces);document.getElementById("pairCount").textContent=String(check.pairCount);store.setState(GameState.READY);showScenario()}
-function updatePairCount(){const check=validateLayout(activePieces());document.getElementById("pairCount").textContent=String(check.pairCount)}
-document.getElementById("scatterBtn").addEventListener("click",beginScatter);document.getElementById("resetBtn").addEventListener("click",reset);document.getElementById("debugBtn").addEventListener("click",()=>{store.debug=!store.debug;document.getElementById("debugBtn").textContent=`DEBUG: ${store.debug?"ON":"OFF"}`;labels.refresh(activePieces(),store.debug&&CONFIG.debug.labels)});collector.reset();engine.runRenderLoop(()=>{document.getElementById("fps").textContent=engine.getFps().toFixed(0);if(store.state===GameState.SETTLING){if(allStable())stableFrames++;else stableFrames=0;const timedOut=performance.now()-settlingStartedAt>7000;if(stableFrames>=CONFIG.physics.stableFramesRequired||timedOut){finalizeLayout();stableFrames=0}}if(store.state===GameState.READY||store.state===GameState.RESULT)pinActivePieces();if(store.debug)labels.follow(activePieces());selector.followRings();scene.render()});window.addEventListener("resize",()=>engine.resize());
+const canvas = document.getElementById("renderCanvas");
+const engine = new BABYLON.Engine(canvas, true, {
+  preserveDrawingBuffer: true,
+  stencil: true,
+  adaptToDeviceRatio: true
+});
+const havokInstance = await HavokPhysics();
+const { scene } = createScene(engine, canvas, havokInstance);
+const store = new StateStore();
+const scatter = new ScatterSystem(scene);
+const selector = new PairSelector(scene, store);
+const labels = new DebugLabels(scene);
+const collector = new CollectorSystem(scene);
+const scenario = new ScenarioEngine();
+const statusEl = document.querySelector(".status");
+if (statusEl) statusEl.textContent = `v${CONFIG.version} • Babylon.js + Havok`;
+
+let stableFrames = 0;
+let settlingStartedAt = 0;
+let hasStartedDemo = false;
+
+function activePieces() {
+  return scatter.pieces.filter(p => !p.metadata?.collected);
+}
+
+function khanPiece() {
+  return scatter.pieces.find(p => p.metadata?.isKhan) || null;
+}
+
+function freezeActivePieces() {
+  for (const p of activePieces()) {
+    const body = p.metadata?.aggregate?.body;
+    if (!body) continue;
+    try {
+      const pos = p.getAbsolutePosition().clone();
+      const q = p.rotationQuaternion
+        ? p.rotationQuaternion.clone()
+        : BABYLON.Quaternion.FromEulerAngles(p.rotation.x, p.rotation.y, p.rotation.z);
+      p.metadata.lockedPosition = pos.clone();
+      p.metadata.lockedQuaternion = q.clone();
+      body.setLinearVelocity(BABYLON.Vector3.Zero());
+      body.setAngularVelocity(BABYLON.Vector3.Zero());
+      body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
+      body.setTargetTransform(pos, q);
+    } catch (_) {}
+  }
+}
+
+function pinActivePieces() {
+  for (const p of activePieces()) {
+    const body = p.metadata?.aggregate?.body;
+    const pos = p.metadata?.lockedPosition;
+    const q = p.metadata?.lockedQuaternion;
+    if (!body || !pos || !q) continue;
+    try {
+      body.setLinearVelocity(BABYLON.Vector3.Zero());
+      body.setAngularVelocity(BABYLON.Vector3.Zero());
+      body.setTargetTransform(pos, q);
+    } catch (_) {}
+  }
+}
+
+function refreshBoard() {
+  freezeActivePieces();
+  updateAllOrientations(activePieces());
+  labels.refresh(activePieces(), store.debug && CONFIG.debug.labels);
+  selector.clearSelection();
+  selector.updateVisuals(scatter.pieces);
+  updatePairCount();
+}
+
+function showScenario() {
+  const s = scenario.snapshot();
+  const hint = document.getElementById("hint");
+  if (s.khanActive) {
+    const khan = khanPiece();
+    if (khan?.metadata?.shell?.material) {
+      khan.metadata.shell.material.emissiveColor = new BABYLON.Color3(0.72, 0.38, 0.02);
+    }
+    hint.textContent = s.scenario === "TWO_KHAN"
+      ? "ЕЩЁ ОДИН ХОД! Выберите любой чүкө — цель ХАН загорится золотым."
+      : "ХАН активирован! Выберите любой чүкө и ударьте по Хану.";
+    return;
+  }
+  hint.textContent = `DEMO ${s.scenario} • собрано ${s.collected}/${s.normalLimit}. Выберите подходящую пару.`;
+}
+
+function finishScenario() {
+  freezeActivePieces();
+  selector.clearSelection();
+  selector.updateVisuals(scatter.pieces);
+  const s = scenario.snapshot();
+  if (s.khanHit) {
+    const khan = khanPiece();
+    if (khan?.metadata?.shell?.material) {
+      khan.metadata.shell.material.emissiveColor = new BABYLON.Color3(0.95, 0.62, 0.08);
+    }
+  }
+  store.setState(GameState.RESULT);
+  document.getElementById("hint").textContent = `${scenario.resultText()} • Нажмите «РАССЫПАТЬ» для следующего сценария.`;
+}
+
+new InputController(
+  scene,
+  canvas,
+  store,
+  selector,
+  () => activePieces(),
+  (source, target) => {
+    if (!source || !target || !scenario.canPlay()) return;
+
+    const khanMove = !!target.metadata?.isKhan;
+    if (khanMove && !scenario.khanActive()) return;
+    if (!khanMove && !scenario.canCollectNormal()) return;
+
+    if (source.metadata) {
+      source.metadata.lockedPosition = null;
+      source.metadata.lockedQuaternion = null;
+    }
+
+    selector.clearSelection();
+    selector.updateVisuals(scatter.pieces);
+    labels.refresh(scatter.pieces, false);
+    store.setState(GameState.FLICKING);
+    document.getElementById("hint").textContent = `${source.metadata.id} → ${target.metadata.id}`;
+
+    const moved = flickToTarget(scene, source, target, ok => {
+      if (!ok) {
+        refreshBoard();
+        store.setState(GameState.READY);
+        showScenario();
+        return;
+      }
+
+      freezeActivePieces();
+
+      if (khanMove) {
+        scenario.registerKhanHit();
+        refreshBoard();
+        finishScenario();
+        return;
+      }
+
+      document.getElementById("hint").textContent = `${target.metadata.id} взят. Переносим в УПАЙ…`;
+      const collecting = collector.collect(target, result => {
+        const state = scenario.registerCollection();
+        refreshBoard();
+
+        if (state.finished) {
+          finishScenario();
+          return;
+        }
+
+        store.setState(GameState.READY);
+        if (state.khanActive) {
+          showScenario();
+          return;
+        }
+
+        const progress = result?.total ?? state.collected;
+        document.getElementById("hint").textContent = `DEMO ${state.scenario} • собрано ${progress}/${state.normalLimit}. Выберите следующую пару.`;
+      });
+
+      if (!collecting) {
+        refreshBoard();
+        store.setState(GameState.READY);
+        showScenario();
+      }
+    });
+
+    if (!moved) {
+      refreshBoard();
+      store.setState(GameState.READY);
+      showScenario();
+    }
+  },
+  () => scenario.khanActive()
+);
+
+function beginScatter() {
+  selector.clearSelection();
+  labels.refresh(scatter.pieces, false);
+  collector.reset();
+  scenario.reset({ advanceDemo: hasStartedDemo });
+  hasStartedDemo = true;
+
+  for (const p of scatter.pieces) {
+    if (p.metadata) {
+      p.metadata.lockedPosition = null;
+      p.metadata.lockedQuaternion = null;
+    }
+  }
+
+  store.setState(GameState.SCATTERING);
+  scatter.scatter();
+  stableFrames = 0;
+  settlingStartedAt = performance.now();
+  store.setState(GameState.SETTLING);
+  document.getElementById("hint").textContent = `Чүкө рассыпаются… DEMO ${scenario.snapshot().scenario}`;
+}
+
+function reset() {
+  selector.clearSelection();
+  labels.refresh(scatter.pieces, false);
+  scatter.clear();
+  collector.reset();
+  scenario.reset();
+  hasStartedDemo = false;
+  document.getElementById("pairCount").textContent = "0";
+  document.getElementById("selected").textContent = "—";
+  store.setState(GameState.INIT);
+  document.getElementById("hint").textContent = "Нажмите «РАССЫПАТЬ». Сценарии идут по кругу, включая ХАН и АЛТЫН УПАЙ.";
+}
+
+function allStable() {
+  const pieces = activePieces();
+  if (!pieces.length) return false;
+  for (const p of pieces) {
+    const body = p.metadata?.aggregate?.body;
+    if (!body) continue;
+    const lv = body.getLinearVelocity();
+    const av = body.getAngularVelocity();
+    if (lv.length() > CONFIG.physics.sleepLinearThreshold || av.length() > CONFIG.physics.sleepAngularThreshold) return false;
+  }
+  return true;
+}
+
+function finalizeLayout() {
+  const pieces = activePieces();
+  updateAllOrientations(pieces);
+  const check = validateLayout(pieces);
+  freezeActivePieces();
+  labels.refresh(pieces, store.debug && CONFIG.debug.labels);
+  selector.updateVisuals(scatter.pieces);
+  document.getElementById("pairCount").textContent = String(check.pairCount);
+  store.setState(GameState.READY);
+  showScenario();
+}
+
+function updatePairCount() {
+  const check = validateLayout(activePieces());
+  document.getElementById("pairCount").textContent = String(check.pairCount);
+}
+
+document.getElementById("scatterBtn").addEventListener("click", beginScatter);
+document.getElementById("resetBtn").addEventListener("click", reset);
+document.getElementById("debugBtn").addEventListener("click", () => {
+  store.debug = !store.debug;
+  document.getElementById("debugBtn").textContent = `DEBUG: ${store.debug ? "ON" : "OFF"}`;
+  labels.refresh(activePieces(), store.debug && CONFIG.debug.labels);
+});
+
+collector.reset();
+engine.runRenderLoop(() => {
+  document.getElementById("fps").textContent = engine.getFps().toFixed(0);
+  if (store.state === GameState.SETTLING) {
+    if (allStable()) stableFrames++;
+    else stableFrames = 0;
+    const timedOut = performance.now() - settlingStartedAt > 7000;
+    if (stableFrames >= CONFIG.physics.stableFramesRequired || timedOut) {
+      finalizeLayout();
+      stableFrames = 0;
+    }
+  }
+  if (store.state === GameState.READY || store.state === GameState.RESULT) pinActivePieces();
+  if (store.debug) labels.follow(activePieces());
+  selector.followRings();
+  scene.render();
+});
+
+window.addEventListener("resize", () => engine.resize());
